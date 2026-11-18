@@ -5,117 +5,148 @@ import { deleteDoc, listDocs, saveDoc } from "./storage";
 import { MapDoc } from "./types";
 
 interface Props {
-  onOpen: (d: MapDoc) => void;
+  onOpen(doc: MapDoc): void;
+}
+
+interface InstallEvent extends Event {
+  prompt(): Promise<void>;
+}
+
+function Preview({ doc }: { doc: MapDoc }) {
+  let src = "";
+  try {
+    const { svg } = toSvg(doc);
+    src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  } catch {
+    /* abaikan */
+  }
+  return src ? <img className="doc-preview" src={src} alt="" /> : <div className="doc-preview" />;
 }
 
 export default function Home({ onOpen }: Props) {
   const [docs, setDocs] = useState<MapDoc[] | null>(null);
-  const [err, setErr] = useState("");
+  const [install, setInstall] = useState<InstallEvent | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const refresh = () => listDocs().then(setDocs).catch(() => setDocs([]));
+  const reload = async () => setDocs(await listDocs());
+
   useEffect(() => {
-    refresh();
+    (async () => {
+      let all = await listDocs();
+      if (!all.length && !localStorage.getItem("mindpitch.seeded")) {
+        await saveDoc(sampleDoc());
+        localStorage.setItem("mindpitch.seeded", "1");
+        all = await listDocs();
+      }
+      setDocs(all);
+    })().catch(() => setDocs([]));
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstall(e as InstallEvent);
+    };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
   }, []);
 
-  const create = async (sample = false) => {
-    const d = sample ? sampleDoc() : newDoc();
+  const create = async () => {
+    const d = newDoc("Peta baru");
     await saveDoc(d);
     onOpen(d);
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Hapus peta ini?")) return;
-    await deleteDoc(id);
-    refresh();
+  const duplicate = async (d: MapDoc) => {
+    const copy: MapDoc = { ...d, id: Math.random().toString(36).slice(2), title: d.title + " (salinan)", createdAt: Date.now(), updatedAt: Date.now() };
+    await saveDoc(copy);
+    reload();
   };
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f) return;
-    try {
-      const text = await f.text();
-      let d: MapDoc;
-      if (f.name.endsWith(".md") || f.name.endsWith(".markdown")) {
-        d = fromMarkdown(text, f.name.replace(/\.md$|\.markdown$/, ""));
-      } else {
-        d = fromJSON(text);
-      }
-      await saveDoc(d);
-      onOpen(d);
-    } catch (ex) {
-      setErr(String(ex));
-    }
+  const remove = async (d: MapDoc) => {
+    if (!window.confirm(`Hapus "${d.title}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+    await deleteDoc(d.id);
+    reload();
+  };
+
+  const importFile = async (f: File) => {
+    const text = await f.text();
+    const isJson = f.name.toLowerCase().endsWith(".json") || text.trim().startsWith("{");
+    const d = isJson ? fromJSON(text) : fromMarkdown(text, f.name.replace(/\.[^.]+$/, ""));
+    if (!d) return alert("Berkas tidak dikenali. Gunakan JSON hasil ekspor atau Markdown/teks berindentasi.");
+    await saveDoc(d);
+    onOpen(d);
   };
 
   return (
     <div className="home">
-      <header className="home-header">
-        <div className="brand">
-          <span className="logo">◇</span>
-          <div>
-            <h1>MindPitch</h1>
-            <p>Peta pikiran yang bisa dipresentasikan</p>
-          </div>
+      <header className="home-head">
+        <div>
+          <h1>MindPitch</h1>
+          <p className="muted">Peta pikiran yang bisa langsung jadi presentasi dan video.</p>
         </div>
-        <div className="home-actions">
-          <button className="primary" onClick={() => create(false)}>
-            + Peta baru
+        <div className="spacer" />
+        {install && (
+          <button
+            className="btn"
+            onClick={async () => {
+              await install.prompt();
+              setInstall(null);
+            }}
+          >
+            ⬇ Pasang aplikasi
           </button>
-          <button onClick={() => create(true)}>Contoh</button>
-          <button onClick={() => fileRef.current?.click()}>Impor</button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json,.md,.markdown"
-            hidden
-            onChange={onFile}
-          />
-        </div>
+        )}
+        <button className="btn" onClick={() => fileRef.current?.click()}>
+          Impor
+        </button>
+        <button className="btn primary" onClick={create}>
+          ＋ Peta baru
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,.md,.markdown,.txt,application/json,text/*"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) importFile(f);
+          }}
+        />
       </header>
 
-      {err && (
-        <div className="banner error" onClick={() => setErr("")}>
-          {err}
+      {docs === null ? (
+        <p className="muted pad">Memuat…</p>
+      ) : !docs.length ? (
+        <div className="empty">
+          <p>Belum ada peta. Mulai dengan membuat peta baru.</p>
+          <button className="btn primary" onClick={create}>
+            ＋ Peta baru
+          </button>
+        </div>
+      ) : (
+        <div className="doc-grid">
+          {docs.map((d) => (
+            <div key={d.id} className="doc-card">
+              <button className="doc-open" onClick={() => onOpen(d)}>
+                <Preview doc={d} />
+                <div className="doc-info">
+                  <b>{d.title}</b>
+                  <span className="muted small">
+                    {Object.keys(d.nodes).length} topik · {new Date(d.updatedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                  </span>
+                </div>
+              </button>
+              <div className="doc-actions">
+                <button className="btn small" onClick={() => duplicate(d)}>
+                  Duplikat
+                </button>
+                <button className="btn small danger" onClick={() => remove(d)}>
+                  Hapus
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
-
-      <section className="doc-list">
-        {docs === null ? (
-          <p className="muted">Memuat…</p>
-        ) : docs.length === 0 ? (
-          <div className="empty">
-            <p>Belum ada peta.</p>
-            <button className="primary" onClick={() => create(false)}>
-              Buat yang pertama
-            </button>
-          </div>
-        ) : (
-          <ul>
-            {docs.map((d) => (
-              <li key={d.id}>
-                <button className="doc-card" onClick={() => onOpen(d)}>
-                  <strong>{d.title || "Tanpa judul"}</strong>
-                  <span className="muted">
-                    {new Date(d.updatedAt).toLocaleString("id-ID")}
-                  </span>
-                </button>
-                <button className="icon danger" title="Hapus" onClick={() => remove(d.id)}>
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <footer className="home-foot">
-        <p>
-          Data tersimpan di perangkat ini (IndexedDB). Bisa diekspor ke JSON / Markdown / PNG / SVG /
-          video.
-        </p>
-      </footer>
     </div>
   );
 }

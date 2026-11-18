@@ -1,49 +1,46 @@
-import type { Doc } from './types'
+import { MapDoc } from "./types";
 
-const DB_NAME = 'mindpitch'
-const STORE = 'docs'
+const DB = "mindpitch";
+const STORE = "docs";
 
-function openDB(): Promise<IDBDatabase> {
+function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1)
+    const req = indexedDB.open(DB, 1);
     req.onupgradeneeded = () => {
-      const db = req.result
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'id' })
-      }
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
+      req.result.createObjectStore(STORE, { keyPath: "id" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-export async function listDocs(): Promise<Doc[]> {
-  const db = await openDB()
+async function tx<T>(
+  mode: IDBTransactionMode,
+  fn: (s: IDBObjectStore) => IDBRequest<T>
+): Promise<T> {
+  const db = await open();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly')
-    const store = tx.objectStore(STORE)
-    const req = store.getAll()
-    req.onsuccess = () => resolve(req.result || [])
-    req.onerror = () => reject(req.error)
-  })
+    const t = db.transaction(STORE, mode);
+    const r = fn(t.objectStore(STORE));
+    t.oncomplete = () => {
+      db.close();
+      resolve(r.result);
+    };
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
 }
 
-export async function saveDoc(doc: Doc): Promise<void> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite')
-    tx.objectStore(STORE).put({ ...doc, updatedAt: Date.now() })
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
+export const listDocs = async (): Promise<MapDoc[]> => {
+  const all = await tx<MapDoc[]>("readonly", (s) => s.getAll());
+  return all.sort((a, b) => b.updatedAt - a.updatedAt);
+};
 
-export async function deleteDoc(id: string): Promise<void> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite')
-    tx.objectStore(STORE).delete(id)
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
+export const getDoc = (id: string) =>
+  tx<MapDoc | undefined>("readonly", (s) => s.get(id));
+
+export const saveDoc = (doc: MapDoc) =>
+  tx<IDBValidKey>("readwrite", (s) => s.put(doc));
+
+export const deleteDoc = (id: string) =>
+  tx<undefined>("readwrite", (s) => s.delete(id));

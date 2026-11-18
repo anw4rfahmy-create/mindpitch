@@ -1,50 +1,71 @@
-export const themes = {
-  dark: {
-    name: 'Dark',
-    bg: '#0f172a',
-    text: '#e2e8f0',
-    accent: '#38bdf8',
-    nodeBg: '#1e293b',
-    nodeBorder: '#334155',
-    line: '#475569',
-  },
-  light: {
-    name: 'Light',
-    bg: '#f8fafc',
-    text: '#0f172a',
-    accent: '#0284c7',
-    nodeBg: '#ffffff',
-    nodeBorder: '#cbd5e1',
-    line: '#94a3b8',
-  },
-  ocean: {
-    name: 'Ocean',
-    bg: '#0c4a6e',
-    text: '#e0f2fe',
-    accent: '#22d3ee',
-    nodeBg: '#075985',
-    nodeBorder: '#0ea5e9',
-    line: '#38bdf8',
-  },
-  forest: {
-    name: 'Forest',
-    bg: '#14532d',
-    text: '#dcfce7',
-    accent: '#4ade80',
-    nodeBg: '#166534',
-    nodeBorder: '#22c55e',
-    line: '#86efac',
-  },
-  sunset: {
-    name: 'Sunset',
-    bg: '#431407',
-    text: '#ffedd5',
-    accent: '#fb923c',
-    nodeBg: '#7c2d12',
-    nodeBorder: '#f97316',
-    line: '#fdba74',
-  },
-} as const
+export interface Theme {
+  id: string;
+  name: string;
+  bg: [string, string]; // gradien atas-kiri → bawah-kanan
+  fg: string;
+  muted: string;
+  accent: string;
+  card: string; // warna latar kartu
+  onAccent: string; // teks di atas warna aksen
+  palette: string[];
+}
 
-export type ThemeKey = keyof typeof themes
-export type Theme = (typeof themes)[ThemeKey]
+export const THEMES: Theme[] = [
+  {
+    id: "terang",
+    name: "Terang",
+    bg: ["#ffffff", "#eef2ff"],
+    fg: "#0f172a",
+    muted: "#64748b",
+    accent: "#4f46e5",
+    card: "#ffffff",
+    onAccent: "#ffffff",
+    palette: ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#0ea5e9", "#8b5cf6", "#ef4444", "#14b8a6"],
+  },
+  {
+    id: "gelap",
+    name: "Gelap",
+    bg: ["#0b1020", "#1a1f3a"],
+    fg: "#f1f5f9",
+    muted: "#94a3b8",
+    accent: "#818cf8",
+    card: "#1e2342",
+    onAccent: "#0b1020",
+    palette: ["#818cf8", "#f472b6", "#fbbf24", "#34d399", "#38bdf8", "#a78bfa", "#f87171", "#2dd4bf"],
+  },
+  {
+    id: "laut",
+    name: "Laut",
+    bg: ["#e0f7fa", "#b2ebf2"],
+    fg: "#06303a",
+    muted: "#38707c",
+    accent: "#0891b2",
+    card: "#ffffff",
+    onAccent: "#ffffff",
+    palette: ["#0891b2", "#0284c7", "#4f46e5", "#0d9488", "#2563eb", "#7c3aed", "#0e7490", "#059669"],
+  },
+  {
+    id: "hutan",
+    name: "Hutan",
+    bg: ["#f0fdf4", "#d9f2df"],
+    fg: "#14301f",
+    muted: "#4d6b59",
+    accent: "#16a34a",
+    card: "#ffffff",
+    onAccent: "#ffffff",
+    palette: ["#16a34a", "#65a30d", "#ca8a04", "#0d9488", "#b45309", "#15803d", "#84cc16", "#0f766e"],
+  },
+  {
+    id: "senja",
+    name: "Senja",
+    bg: ["#fff7ed", "#fde1d3"],
+    fg: "#3b1d12",
+    muted: "#8a5a47",
+    accent: "#ea580c",
+    card: "#ffffff",
+    onAccent: "#ffffff",
+    palette: ["#ea580c", "#db2777", "#d97706", "#dc2626", "#c026d3", "#e11d48", "#f59e0b", "#9333ea"],
+  },
+];
+
+export const themeById = (id: string): Theme => THEMES.find((t) => t.id === id) ?? THEMES[0];
