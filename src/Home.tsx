@@ -1,30 +1,42 @@
 import { useEffect, useRef, useState } from "react";
-import { fromJSON, fromMarkdown, toSvg } from "./exporters";
-import { newDoc, sampleDoc } from "./model";
-import { deleteDoc, listDocs, saveDoc } from "./storage";
-import { MapDoc } from "./types";
+import { importFile as importAny, sheetToPngBlob } from "./exporters";
+import { ensureFonts } from "./fonts";
+import { activeSheet, newWorkbook, sampleWorkbook } from "./model";
+import { deleteDoc, duplicateDoc, listDocs, saveDoc } from "./storage";
+import { Workbook } from "./types";
 
 interface Props {
-  onOpen(doc: MapDoc): void;
+  onOpen(doc: Workbook): void;
 }
 
 interface InstallEvent extends Event {
   prompt(): Promise<void>;
 }
 
-function Preview({ doc }: { doc: MapDoc }) {
-  let src = "";
-  try {
-    const { svg } = toSvg(doc);
-    src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-  } catch {
-    /* abaikan */
-  }
+function Preview({ doc }: { doc: Workbook }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let url = "";
+    let dead = false;
+    const sh = activeSheet(doc);
+    ensureFonts([sh.font])
+      .then(() => sheetToPngBlob(sh, 0.6))
+      .then((b) => {
+        if (dead) return;
+        url = URL.createObjectURL(b);
+        setSrc(url);
+      })
+      .catch(() => {});
+    return () => {
+      dead = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [doc]);
   return src ? <img className="doc-preview" src={src} alt="" /> : <div className="doc-preview" />;
 }
 
 export default function Home({ onOpen }: Props) {
-  const [docs, setDocs] = useState<MapDoc[] | null>(null);
+  const [docs, setDocs] = useState<Workbook[] | null>(null);
   const [install, setInstall] = useState<InstallEvent | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -34,7 +46,7 @@ export default function Home({ onOpen }: Props) {
     (async () => {
       let all = await listDocs();
       if (!all.length && !localStorage.getItem("mindpitch.seeded")) {
-        await saveDoc(sampleDoc());
+        await saveDoc(sampleWorkbook());
         localStorage.setItem("mindpitch.seeded", "1");
         all = await listDocs();
       }
@@ -49,28 +61,25 @@ export default function Home({ onOpen }: Props) {
   }, []);
 
   const create = async () => {
-    const d = newDoc("Peta baru");
+    const d = newWorkbook("Peta baru");
     await saveDoc(d);
     onOpen(d);
   };
 
-  const duplicate = async (d: MapDoc) => {
-    const copy: MapDoc = { ...d, id: Math.random().toString(36).slice(2), title: d.title + " (salinan)", createdAt: Date.now(), updatedAt: Date.now() };
-    await saveDoc(copy);
+  const duplicate = async (d: Workbook) => {
+    await duplicateDoc(d);
     reload();
   };
 
-  const remove = async (d: MapDoc) => {
+  const remove = async (d: Workbook) => {
     if (!window.confirm(`Hapus "${d.title}"? Tindakan ini tidak bisa dibatalkan.`)) return;
     await deleteDoc(d.id);
     reload();
   };
 
   const importFile = async (f: File) => {
-    const text = await f.text();
-    const isJson = f.name.toLowerCase().endsWith(".json") || text.trim().startsWith("{");
-    const d = isJson ? fromJSON(text) : fromMarkdown(text, f.name.replace(/\.[^.]+$/, ""));
-    if (!d) return alert("Berkas tidak dikenali. Gunakan JSON hasil ekspor atau Markdown/teks berindentasi.");
+    const d = await importAny(f);
+    if (!d) return alert("Berkas tidak dikenali. Gunakan berkas .mindpitch, JSON hasil ekspor, atau Markdown/teks berindentasi.");
     await saveDoc(d);
     onOpen(d);
   };
@@ -103,7 +112,7 @@ export default function Home({ onOpen }: Props) {
         <input
           ref={fileRef}
           type="file"
-          accept=".json,.md,.markdown,.txt,application/json,text/*"
+          accept=".mindpitch,.zip,.json,.md,.markdown,.txt"
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -131,7 +140,7 @@ export default function Home({ onOpen }: Props) {
                 <div className="doc-info">
                   <b>{d.title}</b>
                   <span className="muted small">
-                    {Object.keys(d.nodes).length} topik · {new Date(d.updatedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                    {d.sheets.length} lembar · {d.sheets.reduce((a, x) => a + Object.keys(x.nodes).length, 0)} topik · {new Date(d.updatedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
                   </span>
                 </div>
               </button>

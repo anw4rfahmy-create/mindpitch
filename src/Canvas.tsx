@@ -7,12 +7,15 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { PointerEvent as RPointerEvent } from "react";
-import { LayoutResult, LNode, edgePath } from "./layout";
-import { MapDoc } from "./types";
-import { styleFor } from "./nodeStyle";
+import { LayoutResult, LNode } from "./layout";
+import { Sheet } from "./types";
+import { edgeWidth, radiusFor, styleFor } from "./nodeStyle";
 import { isDescendant } from "./model";
+import { filesVersion, subscribeFiles, urlOf } from "./files";
+import { isRtl } from "./fonts";
 
 interface View {
   x: number;
@@ -26,25 +29,29 @@ export interface CanvasHandle {
 }
 
 interface Props {
-  doc: MapDoc;
+  sheet: Sheet;
   layout: LayoutResult;
   selectedId: string | null;
+  selFloat: string | null;
   editingId: string | null;
   fitKey: number;
   onSelect(id: string | null): void;
+  onSelectFloat(id: string | null): void;
   onStartEdit(id: string): void;
   onCommitEdit(id: string, text: string): void;
   onCancelEdit(): void;
   onMove(id: string, newParentId: string): void;
   onToggleCollapse(id: string): void;
+  onFloatChange(id: string, patch: { x?: number; y?: number; w?: number; h?: number }, commit: boolean): void;
+  onOpenAttachments(id: string): void;
 }
 
-const PAD_Y = 9;
-const MIN_K = 0.15;
+const MIN_K = 0.1;
 const MAX_K = 3;
 
 const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
-  const { doc, layout, selectedId, editingId, fitKey } = props;
+  const { sheet, layout, selectedId, editingId, fitKey, selFloat } = props;
+  useSyncExternalStore(subscribeFiles, filesVersion);
   const wrap = useRef<HTMLDivElement>(null);
   const [view, setViewState] = useState<View>({ x: 0, y: 0, k: 1 });
   const viewRef = useRef(view);
@@ -57,7 +64,19 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
   const pan = useRef<{ sx: number; sy: number; vx: number; vy: number; moved: boolean } | null>(null);
   const pinch = useRef<{ d: number; k: number; wx: number; wy: number } | null>(null);
   const dragRef = useRef<{ id: string; sx: number; sy: number; active: boolean } | null>(null);
+  const floatDrag = useRef<{
+    id: string;
+    mode: "move" | "resize";
+    sx: number;
+    sy: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    moved: boolean;
+  } | null>(null);
   const lastTap = useRef<{ id: string; t: number } | null>(null);
+  const lastTapCandidate = useRef<string | null>(null);
   const [drag, setDrag] = useState<{ id: string; wx: number; wy: number; target: string | null } | null>(null);
 
   const size = () => {
@@ -69,8 +88,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     if (!wrap.current) return;
     const { w, h } = size();
     const b = layout.bounds;
-    const k = Math.max(MIN_K, Math.min(1.1, (w - 80) / Math.max(b.w, 1), (h - 120) / Math.max(b.h, 1)));
-    setView({ k, x: w / 2 - (b.x + b.w / 2) * k, y: h / 2 - (b.y + b.h / 2) * k });
+    const k = Math.max(MIN_K, Math.min(1.1, (w - 80) / Math.max(b.w, 1), (h - 130) / Math.max(b.h, 1)));
+    setView({ k, x: w / 2 - (b.x + b.w / 2) * k, y: (h - 40) / 2 - (b.y + b.h / 2) * k });
   }, [layout, setView]);
 
   const zoomAt = useCallback(
@@ -101,15 +120,13 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey]);
 
-  // roda mouse: Ctrl/Cmd = zoom, selain itu = geser
   useEffect(() => {
     const el = wrap.current!;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      if (e.ctrlKey || e.metaKey) {
-        zoomAt(Math.exp(-e.deltaY * 0.0025), e.clientX - r.left, e.clientY - r.top);
-      } else {
+      if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.0025), e.clientX - r.left, e.clientY - r.top);
+      else {
         const v = viewRef.current;
         setView({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY });
       }
@@ -118,7 +135,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomAt, setView]);
 
-  // pastikan node terpilih tetap terlihat
+  // pastikan topik terpilih tetap terlihat
   useEffect(() => {
     if (!selectedId || !wrap.current || dragRef.current) return;
     const n = layout.nodes[selectedId];
@@ -148,7 +165,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
   const hitTest = (wx: number, wy: number, exclude: string): string | null => {
     let best: LNode | null = null;
     for (const id in layout.nodes) {
-      if (isDescendant(doc.nodes, exclude, id)) continue;
+      if (isDescendant(sheet.nodes, exclude, id)) continue;
       const n = layout.nodes[id];
       const m = 8;
       if (wx >= n.x - m && wx <= n.x + n.w + m && wy >= n.y - m && wy <= n.y + n.h + m) {
@@ -170,41 +187,61 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
       const v = viewRef.current;
       const mx = (a.x + b.x) / 2 - left,
         my = (a.y + b.y) / 2 - top;
-      pinch.current = {
-        d: Math.hypot(a.x - b.x, a.y - b.y) || 1,
-        k: v.k,
-        wx: (mx - v.x) / v.k,
-        wy: (my - v.y) / v.k,
-      };
+      pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: v.k, wx: (mx - v.x) / v.k, wy: (my - v.y) / v.k };
       pan.current = null;
       dragRef.current = null;
+      floatDrag.current = null;
       setDrag(null);
       return;
     }
 
     const badge = el.closest("[data-badge]");
     if (badge) {
-      const id = badge.getAttribute("data-badge")!;
-      props.onToggleCollapse(id);
+      props.onToggleCollapse(badge.getAttribute("data-badge")!);
+      pointers.current.delete(e.pointerId);
       return;
+    }
+    const clip = el.closest("[data-clip]");
+    if (clip) {
+      props.onOpenAttachments(clip.getAttribute("data-clip")!);
+      pointers.current.delete(e.pointerId);
+      return;
+    }
+    const fEl = el.closest("[data-float]");
+    if (fEl) {
+      const id = fEl.getAttribute("data-float")!;
+      const f = sheet.floats.find((x) => x.id === id);
+      if (f) {
+        props.onSelectFloat(id);
+        props.onSelect(null);
+        floatDrag.current = {
+          id,
+          mode: el.closest("[data-fhandle]") ? "resize" : "move",
+          sx: e.clientX,
+          sy: e.clientY,
+          x: f.x,
+          y: f.y,
+          w: f.w,
+          h: f.h,
+          moved: false,
+        };
+        return;
+      }
     }
     const nodeEl = el.closest("[data-nid]");
     if (nodeEl) {
       const id = nodeEl.getAttribute("data-nid")!;
       props.onSelect(id);
-      const isRoot = id === doc.rootId;
-      // node biasa bisa di-drag (pindah induk); root hanya menggeser kanvas
+      props.onSelectFloat(null);
+      const isRoot = id === sheet.rootId;
       dragRef.current = isRoot ? null : { id, sx: e.clientX, sy: e.clientY, active: false };
-      pan.current = isRoot
-        ? { sx: e.clientX, sy: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y, moved: false }
-        : null;
+      pan.current = isRoot ? { sx: e.clientX, sy: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y, moved: false } : null;
       lastTapCandidate.current = id;
     } else {
       pan.current = { sx: e.clientX, sy: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y, moved: false };
       lastTapCandidate.current = null;
     }
   };
-  const lastTapCandidate = useRef<string | null>(null);
 
   const onPointerMove = (e: RPointerEvent) => {
     if (!pointers.current.has(e.pointerId)) return;
@@ -218,6 +255,20 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
       const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
       const k = Math.min(MAX_K, Math.max(MIN_K, pinch.current.k * (d / pinch.current.d)));
       setView({ k, x: mx - pinch.current.wx * k, y: my - pinch.current.wy * k });
+      return;
+    }
+
+    const fd = floatDrag.current;
+    if (fd) {
+      const k = viewRef.current.k;
+      const dx = (e.clientX - fd.sx) / k,
+        dy = (e.clientY - fd.sy) / k;
+      if (Math.abs(dx) + Math.abs(dy) > 2) fd.moved = true;
+      if (fd.mode === "move") props.onFloatChange(fd.id, { x: fd.x + dx, y: fd.y + dy }, false);
+      else {
+        const w = Math.max(30, fd.w + dx);
+        props.onFloatChange(fd.id, { w, h: (w / fd.w) * fd.h }, false);
+      }
       return;
     }
 
@@ -250,13 +301,27 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
       }
       return;
     }
+    const fd = floatDrag.current;
+    if (fd) {
+      floatDrag.current = null;
+      if (fd.moved) {
+        const k = viewRef.current.k;
+        const dx = (e.clientX - fd.sx) / k,
+          dy = (e.clientY - fd.sy) / k;
+        if (fd.mode === "move") props.onFloatChange(fd.id, { x: fd.x + dx, y: fd.y + dy }, true);
+        else {
+          const w = Math.max(30, fd.w + dx);
+          props.onFloatChange(fd.id, { w, h: (w / fd.w) * fd.h }, true);
+        }
+      }
+      return;
+    }
     const dr = dragRef.current;
     if (dr && dr.active) {
       const w = toWorld(e.clientX, e.clientY);
       const target = hitTest(w.x, w.y, dr.id);
       if (target) props.onMove(dr.id, target);
     } else if (lastTapCandidate.current) {
-      // ketukan pada node: ketuk dua kali = edit
       const id = lastTapCandidate.current;
       const now = Date.now();
       const lt = lastTap.current;
@@ -266,6 +331,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
       } else lastTap.current = { id, t: now };
     } else if (pan.current && !pan.current.moved) {
       props.onSelect(null);
+      props.onSelectFloat(null);
     }
     dragRef.current = null;
     pan.current = null;
@@ -274,148 +340,144 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
   };
 
   // ---------- render ----------
-  const edges = useMemo(() => {
-    const out: JSX.Element[] = [];
-    for (const id of layout.order) {
-      const c = layout.nodes[id];
-      if (!c.parentId) continue;
-      const p = layout.nodes[c.parentId];
-      const st = styleFor(doc.nodes, doc.rootId, id, c.depth);
-      out.push(
-        <path
-          key={id}
-          d={edgePath(p, c)}
-          fill="none"
-          stroke={st.branch}
-          strokeWidth={c.depth === 1 ? 3 : 2}
-          strokeLinecap="round"
-          opacity={0.85}
-        />
-      );
-    }
-    return out;
-  }, [layout, doc.nodes, doc.rootId]);
+  const edges = useMemo(
+    () =>
+      layout.edges.map((e) => {
+        if (e.kind === "axis")
+          return (
+            <path key={e.key} d={e.d} fill="none" stroke="#334155" strokeWidth={4} strokeLinecap="round" markerEnd="" />
+          );
+        const owner = layout.nodes[e.childId];
+        const depth = e.kind === "brace" ? owner.depth + 1 : owner.depth;
+        const color = styleFor(sheet, sheet.nodes[e.kind === "brace" ? e.childId : e.childId], owner.depth).branch;
+        return (
+          <path
+            key={e.key}
+            d={e.d}
+            fill="none"
+            stroke={e.kind === "brace" && e.childId === sheet.rootId ? "#334155" : color}
+            strokeWidth={edgeWidth(sheet, depth)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        );
+      }),
+    [layout, sheet]
+  );
 
-  const nodeEls = useMemo(() => {
-    return layout.order.map((id) => {
-      const ln = layout.nodes[id];
-      const n = doc.nodes[id];
-      const st = styleFor(doc.nodes, doc.rootId, id, ln.depth);
-      const selected = id === selectedId;
-      const hideText = id === editingId;
-      const textY0 = (ln.h - ln.lines.length * ln.lineH) / 2;
-      let bx = ln.w + 13,
-        by = ln.h / 2;
-      if (ln.side === "l") bx = -13;
-      else if (ln.side === "d") {
-        bx = ln.w / 2;
-        by = ln.h + 13;
-      }
-      return (
-        <g key={id} data-nid={id} transform={`translate(${ln.x},${ln.y})`} style={{ cursor: "pointer" }}>
-          {st.shape === "line" ? (
-            <>
+  const nodeEls = useMemo(
+    () =>
+      layout.order.map((id) => {
+        const ln = layout.nodes[id];
+        const n = sheet.nodes[id];
+        const st = styleFor(sheet, n, ln.depth);
+        const hideText = id === editingId;
+        const r = radiusFor(st.shape, ln.h);
+        const imgUrl = ln.img ? urlOf(ln.img.fileId) : undefined;
+        const ac = n.attachments?.length ?? 0;
+        return (
+          <g key={id} data-nid={id} transform={`translate(${ln.x},${ln.y})`} style={{ cursor: "pointer" }}>
+            {st.shape === "line" ? (
+              <>
+                <rect width={ln.w} height={ln.h} fill="transparent" />
+                <line x1={0} y1={ln.h} x2={ln.w} y2={ln.h} stroke={st.stroke} strokeWidth={st.strokeWidth} strokeLinecap="round" />
+              </>
+            ) : st.shape === "none" ? (
               <rect width={ln.w} height={ln.h} fill="transparent" />
-              <line x1={0} y1={ln.h} x2={ln.w} y2={ln.h} stroke={st.stroke} strokeWidth={st.strokeWidth} />
-            </>
-          ) : (
-            <rect
-              width={ln.w}
-              height={ln.h}
-              rx={st.radius(ln.h)}
-              fill={st.fill}
-              stroke={st.stroke}
-              strokeWidth={st.strokeWidth}
-            />
-          )}
-          {!hideText &&
-            ln.lines.map((l, i) => (
-              <text
-                key={i}
-                x={ln.w / 2}
-                y={textY0 + ln.lineH * (i + 0.5)}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill={st.text}
-                style={{ font: ln.font, userSelect: "none", pointerEvents: "none" }}
-              >
-                {l}
-              </text>
-            ))}
-          {n.note && <circle cx={ln.w - 4} cy={4} r={4.5} fill="#f59e0b" stroke="#fff" strokeWidth={1.5} />}
-          {ln.hasHidden && (
-            <g data-badge={id} style={{ cursor: "pointer" }}>
-              <circle cx={bx} cy={by} r={10} fill="#fff" stroke={st.branch} strokeWidth={1.5} />
-              <text
-                x={bx}
-                y={by}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill={st.branch}
-                style={{ font: `700 11px system-ui, sans-serif`, pointerEvents: "none" }}
-              >
-                {n.children.length}
-              </text>
-            </g>
-          )}
-          {selected && (
-            <rect
-              x={-4}
-              y={-4}
-              width={ln.w + 8}
-              height={ln.h + 8}
-              rx={st.radius(ln.h) + 4}
-              fill="none"
-              stroke="#4f46e5"
-              strokeWidth={2.5}
-              pointerEvents="none"
-            />
-          )}
-        </g>
-      );
-    });
-  }, [layout, doc.nodes, doc.rootId, selectedId, editingId]);
+            ) : st.shape === "ellipse" ? (
+              <ellipse cx={ln.w / 2} cy={ln.h / 2} rx={ln.w / 2} ry={ln.h / 2} fill={st.fill} stroke={st.stroke} strokeWidth={st.strokeWidth} />
+            ) : (
+              <rect width={ln.w} height={ln.h} rx={r} fill={st.fill} stroke={st.stroke} strokeWidth={st.strokeWidth} />
+            )}
+            {ln.img && imgUrl && (
+              <image href={imgUrl} x={ln.img.x} y={ln.img.y} width={ln.img.w} height={ln.img.h} preserveAspectRatio="xMidYMid slice" pointerEvents="none" />
+            )}
+            {ln.img && !imgUrl && (
+              <rect x={ln.img.x} y={ln.img.y} width={ln.img.w} height={ln.img.h} fill="#e2e8f0" pointerEvents="none" />
+            )}
+            {!hideText &&
+              ln.lines.map((l, i) => (
+                <text
+                  key={i}
+                  x={ln.w / 2}
+                  y={ln.textTop + ln.lineH * (i + 0.5)}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  direction={ln.rtl ? "rtl" : "ltr"}
+                  fill={st.text}
+                  style={{ font: ln.font, userSelect: "none", pointerEvents: "none" }}
+                >
+                  {l}
+                </text>
+              ))}
+            {n.note && <circle cx={ln.w - 3} cy={3} r={4.5} fill="#f59e0b" stroke="#fff" strokeWidth={1.5} pointerEvents="none" />}
+            {ac > 0 && (
+              <g data-clip={id} transform={`translate(${ln.w - 2},${ln.h - 2})`} style={{ cursor: "pointer" }}>
+                <circle r={9} fill="#fff" stroke="#64748b" strokeWidth={1.3} />
+                <path d="M-3.5,1.5 L1,-3.2 a2,2 0 0 1 2.8,2.8 L-1.8,4.4 a3.3,3.3 0 0 1 -4.6,-4.6 L-0.8,-5.8" fill="none" stroke="#475569" strokeWidth={1.2} strokeLinecap="round" transform="scale(.85)" />
+                {ac > 1 && (
+                  <text x={11} y={-5} fontSize={9} fontWeight={700} fill="#475569" style={{ font: "700 9px system-ui" }}>
+                    {ac}
+                  </text>
+                )}
+              </g>
+            )}
+            {id === selectedId && (
+              <rect
+                x={-4}
+                y={-4}
+                width={ln.w + 8}
+                height={ln.h + 8}
+                rx={(st.shape === "ellipse" ? ln.h / 2 : r) + 4}
+                fill="none"
+                stroke="#4f46e5"
+                strokeWidth={2.5}
+                pointerEvents="none"
+              />
+            )}
+          </g>
+        );
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [layout, sheet, selectedId, editingId, filesVersion()]
+  );
+
+  const badgeScale = Math.min(2.2, Math.max(0.8, 1 / view.k));
+  const badges = layout.order.map((id) => {
+    const ln = layout.nodes[id];
+    if (!ln.badge || !ln.hasKids) return null;
+    const collapsed = ln.hasHidden;
+    const color = styleFor(sheet, sheet.nodes[id], ln.depth).branch;
+    return (
+      <g
+        key={id}
+        data-badge={id}
+        className={"badge" + (collapsed ? " collapsed" : "") + (id === selectedId ? " sel" : "")}
+        transform={`translate(${ln.badge.x},${ln.badge.y}) scale(${badgeScale})`}
+        style={{ cursor: "pointer" }}
+      >
+        <circle r={13} fill="transparent" />
+        <circle r={8.5} fill="#fff" stroke={color} strokeWidth={1.6} />
+        <path d={collapsed ? "M-4,0 H4 M0,-4 V4" : "M-4,0 H4"} stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      </g>
+    );
+  });
 
   const ghost = (() => {
     if (!drag) return null;
     const ln = layout.nodes[drag.id];
     if (!ln) return null;
-    const st = styleFor(doc.nodes, doc.rootId, drag.id, ln.depth);
+    const st = styleFor(sheet, sheet.nodes[drag.id], ln.depth);
     const t = drag.target ? layout.nodes[drag.target] : null;
     return (
       <g pointerEvents="none">
         {t && (
-          <rect
-            x={t.x - 6}
-            y={t.y - 6}
-            width={t.w + 12}
-            height={t.h + 12}
-            rx={14}
-            fill="rgba(79,70,229,.12)"
-            stroke="#4f46e5"
-            strokeWidth={2}
-            strokeDasharray="6 4"
-          />
+          <rect x={t.x - 6} y={t.y - 6} width={t.w + 12} height={t.h + 12} rx={14} fill="rgba(79,70,229,.12)" stroke="#4f46e5" strokeWidth={2} strokeDasharray="6 4" />
         )}
         <g transform={`translate(${drag.wx - ln.w / 2},${drag.wy - ln.h / 2})`} opacity={0.8}>
-          <rect
-            width={ln.w}
-            height={ln.h}
-            rx={st.radius(ln.h)}
-            fill={st.fill === "none" ? "#fff" : st.fill}
-            stroke={st.stroke}
-            strokeWidth={2}
-          />
+          <rect width={ln.w} height={ln.h} rx={radiusFor(st.shape, ln.h)} fill={st.fill === "none" ? "#fff" : st.fill} stroke={st.stroke === "none" ? "#94a3b8" : st.stroke} strokeWidth={2} />
           {ln.lines.map((l, i) => (
-            <text
-              key={i}
-              x={ln.w / 2}
-              y={(ln.h - ln.lines.length * ln.lineH) / 2 + ln.lineH * (i + 0.5)}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill={st.fill === "none" ? "#0f172a" : st.text}
-              style={{ font: ln.font }}
-            >
+            <text key={i} x={ln.w / 2} y={ln.textTop + ln.lineH * (i + 0.5)} textAnchor="middle" dominantBaseline="central" fill={st.fill === "none" ? "#0f172a" : st.text} style={{ font: ln.font }}>
               {l}
             </text>
           ))}
@@ -424,12 +486,41 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     );
   })();
 
+  const floats = sheet.floats.map((f) => {
+    const u = urlOf(f.fileId);
+    const sel = f.id === selFloat;
+    return (
+      <g key={f.id} data-float={f.id} style={{ cursor: "move" }}>
+        {u ? <image href={u} x={f.x} y={f.y} width={f.w} height={f.h} preserveAspectRatio="none" /> : <rect x={f.x} y={f.y} width={f.w} height={f.h} fill="#e2e8f0" />}
+        {sel && (
+          <>
+            <rect x={f.x} y={f.y} width={f.w} height={f.h} fill="none" stroke="#4f46e5" strokeWidth={2 / view.k} strokeDasharray={`${6 / view.k} ${4 / view.k}`} pointerEvents="none" />
+            <g data-fhandle="1" style={{ cursor: "nwse-resize" }}>
+              <rect x={f.x + f.w - 8 / view.k} y={f.y + f.h - 8 / view.k} width={16 / view.k} height={16 / view.k} rx={3 / view.k} fill="#4f46e5" stroke="#fff" strokeWidth={1.5 / view.k} />
+            </g>
+          </>
+        )}
+      </g>
+    );
+  });
+
   const editLn = editingId ? layout.nodes[editingId] : null;
+  const bg = sheet.bg;
+  const bgUrl = urlOf(bg.imageId);
+  const bgStyle: React.CSSProperties = { backgroundColor: bg.color };
+  if (bg.color !== "#fbfcff") bgStyle.backgroundImage = "none";
+  if (bgUrl) {
+    bgStyle.backgroundImage = `url(${bgUrl})`;
+    bgStyle.backgroundSize = bg.fit === "tile" ? "auto" : bg.fit;
+    bgStyle.backgroundRepeat = bg.fit === "tile" ? "repeat" : "no-repeat";
+    bgStyle.backgroundPosition = "center";
+  }
 
   return (
     <div
       ref={wrap}
       className="canvas"
+      style={bgStyle}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -437,9 +528,11 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     >
       <svg width="100%" height="100%" style={{ display: "block" }}>
         <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+          {floats}
           {edges}
           {nodeEls}
           {ghost}
+          <g>{badges}</g>
         </g>
       </svg>
       {editLn && editingId && (
@@ -447,7 +540,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
           key={editingId}
           ln={editLn}
           view={view}
-          initial={doc.nodes[editingId].text}
+          initial={sheet.nodes[editingId].text}
           onCommit={(t) => props.onCommitEdit(editingId, t)}
           onCancel={props.onCancelEdit}
         />
@@ -494,13 +587,15 @@ function InlineEditor({
   const k = view.k;
   const width = Math.max(ln.w, 150) * k;
   const cx = (ln.x + ln.w / 2) * k + view.x;
-  const cy = (ln.y + ln.h / 2) * k + view.y;
+  const cy = (ln.y + ln.textTop + (ln.lines.length * ln.lineH) / 2) * k + view.y;
+  const rtl = isRtl(val);
   return (
     <textarea
       ref={ta}
       className="inline-edit"
       value={val}
       rows={1}
+      dir={rtl ? "rtl" : "ltr"}
       spellCheck={false}
       onChange={(e) => setVal(e.target.value)}
       onBlur={() => finish(true)}
@@ -517,11 +612,11 @@ function InlineEditor({
       }}
       style={{
         left: cx - width / 2,
-        top: cy - (ln.lines.length * ln.lineH * k) / 2 - PAD_Y * k,
+        top: cy - (ln.lines.length * ln.lineH * k) / 2 - 8 * k,
         width,
-        fontSize: ln.fontSize * k,
+        font: ln.font.replace(/\d+(\.\d+)?px/, `${ln.fontSize * k}px`),
         lineHeight: `${ln.lineH * k}px`,
-        padding: `${PAD_Y * k}px ${10 * k}px`,
+        padding: `${8 * k}px ${10 * k}px`,
       }}
     />
   );

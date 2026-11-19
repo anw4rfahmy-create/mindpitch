@@ -1,42 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Presenter from "./Presenter";
-import { PitchCfg } from "./pitchPlayer";
-import { SH, SW, drawSlide } from "./pitchRender";
-import { Slide, buildSlides } from "./slides";
-import { THEMES, themeById } from "./themes";
-import { MapDoc, PitchSettings, SlideStyle, Transition } from "./types";
-import { exportVideo, pickVideoMime } from "./videoExport";
+import { SH, SW, FrameOpts, drawStatic } from "./pitchRender";
+import { buildSteps } from "./pitchScenes";
+import { PITCH_THEMES, pitchThemeById } from "./themes";
+import { PitchSettings, Sheet, SlideTransition, Workbook } from "./types";
+import { exportVideo, pickVideoMime, videoSeconds } from "./videoExport";
 import { download, safeName } from "./exporters";
+import { ensureFonts } from "./fonts";
+import { filesVersion, loadImage, imageSync, prepareImage, putFile, subscribeFiles } from "./files";
 
 interface Props {
-  doc: MapDoc;
-  apply(fn: (d: MapDoc) => MapDoc, history?: boolean): void;
+  wb: Workbook;
+  sheet: Sheet;
+  startId: string | null;
+  applySheet(fn: (s: Sheet) => Sheet, history?: boolean): void;
   onClose(): void;
 }
 
-const ALL = 9999;
-
-function Thumb({ slide, theme, index, total }: { slide: Slide; theme: ReturnType<typeof themeById>; index: number; total: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const ctx = el.getContext("2d")!;
-    ctx.setTransform(el.width / SW, 0, 0, el.height / SH, 0, 0);
-    drawSlide(ctx, slide, theme, ALL, { index, total });
-  }, [slide, theme, index, total]);
-  return <canvas ref={ref} width={256} height={144} className="thumb" />;
-}
-
-function Seg<T extends string | number>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: [T, string][];
-  onChange(v: T): void;
-}) {
+function Seg<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange(v: T): void }) {
   return (
     <div className="seg">
       {options.map(([v, label]) => (
@@ -48,53 +29,65 @@ function Seg<T extends string | number>({
   );
 }
 
-export default function PitchPanel({ doc, apply, onClose }: Props) {
-  const p = doc.pitch;
-  const theme = themeById(p.theme);
-  const all = useMemo(() => buildSlides(doc, theme), [doc.nodes, doc.rootId, doc.pitch, theme]);
-  const active = useMemo(() => all.filter((s) => !s.excluded), [all]);
-  const cfg: PitchCfg = useMemo(
-    () => ({ transition: p.transition, reveal: p.reveal, secondsPerSlide: p.secondsPerSlide }),
-    [p.transition, p.reveal, p.secondsPerSlide]
-  );
-
-  const [selId, setSelId] = useState<string>(all[0]?.id ?? "");
-  const sel = all.find((s) => s.id === selId) ?? all[0];
+export default function PitchPanel({ wb, sheet, startId, applySheet, onClose }: Props) {
+  const p = sheet.pitch;
+  const theme = pitchThemeById(p.theme);
+  useSyncExternalStore(subscribeFiles, filesVersion);
+  const [from, setFrom] = useState<"root" | "sel">(startId && startId !== sheet.rootId ? "sel" : "root");
+  const [ready, setReady] = useState(0);
+  const [idx, setIdx] = useState(0);
   const [present, setPresent] = useState<{ start: number; auto: boolean } | null>(null);
   const [exp, setExp] = useState<number | null>(null);
   const abort = useRef<AbortController | null>(null);
   const prevRef = useRef<HTMLCanvasElement>(null);
+  const bgInput = useRef<HTMLInputElement>(null);
   const canVideo = !!pickVideoMime();
 
-  const set = (patch: Partial<PitchSettings>) =>
-    apply((d) => ({ ...d, pitch: { ...d.pitch, ...patch } }), false);
+  // muat font & gambar yang dibutuhkan
+  useEffect(() => {
+    const ids = new Set<string>([sheet.font]);
+    const files = new Set<string>();
+    for (const id in sheet.nodes) {
+      if (sheet.nodes[id].font) ids.add(sheet.nodes[id].font!);
+      if (sheet.nodes[id].image) files.add(sheet.nodes[id].image!.fileId);
+    }
+    if (p.bgImageId) files.add(p.bgImageId);
+    Promise.all([ensureFonts([...ids]), ...[...files].map((f) => loadImage(f))]).then(() => setReady((n) => n + 1));
+  }, [sheet.font, sheet.nodes, p.bgImageId]);
 
-  // pratinjau besar
+  const startNode = from === "sel" && startId && sheet.nodes[startId] ? startId : sheet.rootId;
+  const steps = useMemo(
+    () => buildSteps(sheet, { startId: startNode, focus: p.focus, textScale: p.textScale }),
+    [sheet, startNode, p.focus, p.textScale, ready] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const opts: FrameOpts = useMemo(
+    () => ({ theme, bgImage: imageSync(p.bgImageId), bgDim: p.bgDim, transition: p.transition }),
+    [theme, p.bgImageId, p.bgDim, p.transition, ready, filesVersion()] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const cur = Math.min(idx, Math.max(0, steps.length - 1));
+
   useEffect(() => {
     const el = prevRef.current;
-    if (!el || !sel) return;
+    if (!el || !steps[cur]) return;
     const ctx = el.getContext("2d")!;
     ctx.setTransform(el.width / SW, 0, 0, el.height / SH, 0, 0);
-    drawSlide(ctx, sel, theme, ALL, { index: Math.max(0, active.indexOf(sel)), total: Math.max(active.length, 1) });
-  }, [sel, theme, active]);
+    drawStatic(ctx, steps[cur], opts);
+  }, [steps, cur, opts]);
 
-  const toggleExclude = (s: Slide) => {
-    if (s.kind === "cover") return;
-    const parent = doc.nodes[s.id]?.parentId ?? "";
-    const ex = new Set(p.excluded);
-    if (ex.has(s.id) || ex.has(parent)) {
-      ex.delete(s.id);
-      ex.delete(parent);
-    } else ex.add(s.id);
-    set({ excluded: [...ex] });
+  const set = (patch: Partial<PitchSettings>) => applySheet((s) => ({ ...s, pitch: { ...s.pitch, ...patch } }), false);
+
+  // topik utama yang bisa disertakan/dikeluarkan
+  const rows: { id: string; depth: number }[] = [];
+  const walk = (id: string, d: number) => {
+    if (d > 2) return;
+    rows.push({ id, depth: d });
+    sheet.nodes[id].children.forEach((c) => sheet.nodes[c] && sheet.nodes[c].children.length + d >= 0 && walk(c, d + 1));
   };
-
-  const setSlideStyle = (v: SlideStyle | "") => {
-    if (!sel || sel.kind === "cover") return;
-    const o = { ...p.styleOverrides };
-    if (v) o[sel.id] = v;
-    else delete o[sel.id];
-    set({ styleOverrides: o });
+  walk(sheet.rootId, 0);
+  const toggleEx = (id: string) => {
+    const ex = new Set(p.excluded);
+    ex.has(id) ? ex.delete(id) : ex.add(id);
+    set({ excluded: [...ex] });
   };
 
   const runExport = async () => {
@@ -102,8 +95,8 @@ export default function PitchPanel({ doc, apply, onClose }: Props) {
     abort.current = ac;
     setExp(0);
     try {
-      const res = await exportVideo(active, theme, cfg, { onProgress: (x) => setExp(x), signal: ac.signal });
-      download(res.blob, `${safeName(doc.title)}-pitch.${res.ext}`);
+      const res = await exportVideo(steps, opts, p.secondsPerStep, { onProgress: setExp, signal: ac.signal });
+      download(res.blob, `${safeName(wb.title + "-" + sheet.title)}-pitch.${res.ext}`);
     } catch (e) {
       if ((e as Error).name !== "AbortError") alert((e as Error).message || "Gagal mengekspor video");
     } finally {
@@ -112,19 +105,31 @@ export default function PitchPanel({ doc, apply, onClose }: Props) {
     }
   };
 
-  const startIdx = sel ? Math.max(0, active.indexOf(sel)) : 0;
-  const totalSec = active.length * p.secondsPerSlide;
+  const pickBg = async (f?: File) => {
+    if (!f) return;
+    try {
+      const { blob } = await prepareImage(f, 1920);
+      const id = await putFile(wb.id, blob, f.name, blob.type);
+      set({ bgImageId: id });
+    } catch {
+      alert("Gagal memuat gambar");
+    }
+  };
+
+  const totalSec = Math.round(videoSeconds(steps.length, p.secondsPerStep));
 
   return (
     <div className="overlay pitch">
       <div className="pitch-head">
         <h2>🎬 Pitch</h2>
-        <span className="muted small">{active.length} slide · ±{totalSec} dtk</span>
+        <span className="muted small">
+          {steps.length} langkah · ±{totalSec} dtk
+        </span>
         <div className="spacer" />
-        <button className="btn primary" disabled={!active.length} onClick={() => setPresent({ start: startIdx, auto: false })}>
+        <button className="btn primary" disabled={!steps.length} onClick={() => setPresent({ start: 0, auto: false })}>
           ▶ Presentasikan
         </button>
-        <button className="btn" disabled={!active.length} onClick={() => setPresent({ start: 0, auto: true })}>
+        <button className="btn" disabled={!steps.length} onClick={() => setPresent({ start: 0, auto: true })}>
           ⏵ Putar otomatis
         </button>
         <button className="btn icon" onClick={onClose} aria-label="Tutup">
@@ -134,52 +139,59 @@ export default function PitchPanel({ doc, apply, onClose }: Props) {
 
       <div className="pitch-body">
         <aside className="pitch-list">
-          {all.map((s, i) => {
-            const n = active.indexOf(s);
-            return (
-              <div
-                key={s.id}
-                className={"slide-row" + (s.id === sel?.id ? " sel" : "") + (s.excluded ? " off" : "")}
-                onClick={() => setSelId(s.id)}
-              >
-                <Thumb slide={s} theme={theme} index={Math.max(n, 0)} total={Math.max(active.length, 1)} />
-                <div className="slide-meta">
-                  <span className="slide-no">{i + 1}</span>
-                  <span className="slide-title">{s.title}</span>
-                </div>
-                {s.kind !== "cover" && (
-                  <button
-                    className="eye"
-                    title={s.excluded ? "Sertakan slide" : "Sembunyikan slide"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleExclude(s);
-                    }}
-                  >
-                    {s.excluded ? "🚫" : "👁"}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          {!all.length && <p className="muted small pad">Tambahkan cabang pada peta untuk membuat slide.</p>}
+          <div className="field pad">
+            <span>Mulai dari</span>
+            <Seg<"root" | "sel">
+              value={from}
+              options={[
+                ["root", "Topik pusat"],
+                ["sel", "Topik terpilih"],
+              ]}
+              onChange={setFrom}
+            />
+            {from === "sel" && startNode !== sheet.rootId && <small className="muted">“{sheet.nodes[startNode].text.split("\n")[0].slice(0, 30)}”</small>}
+          </div>
+          <div className="pad small muted" style={{ paddingTop: 0 }}>
+            Sertakan / sembunyikan topik:
+          </div>
+          {rows.map(({ id, depth }) => (
+            <label key={id} className="ex-row" style={{ paddingLeft: 12 + depth * 16 }}>
+              <input type="checkbox" checked={!p.excluded.includes(id)} disabled={id === sheet.rootId} onChange={() => toggleEx(id)} />
+              <span>{sheet.nodes[id].text.split("\n")[0].slice(0, 34)}</span>
+            </label>
+          ))}
         </aside>
 
         <main className="pitch-preview">
           <canvas ref={prevRef} width={1280} height={720} className="preview-canvas" />
-          {sel?.note && (
+          <div className="step-nav">
+            <button className="btn small" disabled={cur <= 0} onClick={() => setIdx(cur - 1)}>
+              ◀
+            </button>
+            <input type="range" min={0} max={Math.max(0, steps.length - 1)} value={cur} onChange={(e) => setIdx(+e.target.value)} />
+            <button className="btn small" disabled={cur >= steps.length - 1} onClick={() => setIdx(cur + 1)}>
+              ▶
+            </button>
+            <span className="small muted">
+              {cur + 1} / {steps.length}
+            </span>
+            <button className="btn small" onClick={() => setPresent({ start: cur, auto: false })}>
+              Putar dari sini
+            </button>
+          </div>
+          {steps[cur]?.note && (
             <div className="note-box">
               <b>Catatan pembicara</b>
-              <p>{sel.note}</p>
+              <p>{steps[cur].note}</p>
             </div>
           )}
         </main>
 
         <aside className="pitch-settings">
-          <label className="field">
+          <div className="field">
             <span>Tema</span>
             <div className="themes">
-              {THEMES.map((t) => (
+              {PITCH_THEMES.map((t) => (
                 <button
                   key={t.id}
                   className={"theme-chip" + (t.id === p.theme ? " on" : "")}
@@ -191,83 +203,48 @@ export default function PitchPanel({ doc, apply, onClose }: Props) {
                 </button>
               ))}
             </div>
-          </label>
-
-          <div className="field">
-            <span>Struktur slide</span>
-            <Seg<1 | 2>
-              value={p.depth}
-              options={[
-                [1, "Per cabang utama"],
-                [2, "Hingga sub-cabang"],
-              ]}
-              onChange={(v) => set({ depth: v })}
-            />
           </div>
-
           <div className="field">
-            <span>Gaya isi</span>
-            <Seg<SlideStyle>
-              value={p.style}
-              options={[
-                ["bullets", "Poin"],
-                ["cards", "Kartu"],
-                ["map", "Peta"],
-              ]}
-              onChange={(v) => set({ style: v })}
-            />
-            {sel && sel.kind !== "cover" && (
-              <select
-                className="select"
-                value={p.styleOverrides[sel.id] ?? ""}
-                onChange={(e) => setSlideStyle(e.target.value as SlideStyle | "")}
-              >
-                <option value="">Slide terpilih: ikuti gaya umum</option>
-                <option value="bullets">Slide terpilih: Poin</option>
-                <option value="cards">Slide terpilih: Kartu</option>
-                <option value="map">Slide terpilih: Peta</option>
-              </select>
+            <span>Gambar latar Pitch</span>
+            <div className="seg wrap">
+              <button onClick={() => bgInput.current?.click()}>{p.bgImageId ? "Ganti gambar" : "＋ Gambar latar"}</button>
+              {p.bgImageId && <button onClick={() => set({ bgImageId: undefined })}>Hapus</button>}
+            </div>
+            {p.bgImageId && (
+              <label className="check">
+                Gelapkan
+                <input type="range" min={0} max={0.8} step={0.05} value={p.bgDim} onChange={(e) => set({ bgDim: +e.target.value })} />
+              </label>
             )}
+            <input ref={bgInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; pickBg(f); }} />
           </div>
-
+          <label className="check">
+            <input type="checkbox" checked={p.focus} onChange={(e) => set({ focus: e.target.checked })} />
+            Mulai dengan judul di tengah layar
+          </label>
           <div className="field">
             <span>Transisi</span>
-            <Seg<Transition>
+            <Seg<SlideTransition>
               value={p.transition}
               options={[
-                ["fade", "Pudar"],
-                ["slide", "Geser"],
+                ["fade", "Bergerak"],
                 ["none", "Tanpa"],
               ]}
               onChange={(v) => set({ transition: v })}
             />
           </div>
-
-          <label className="check">
-            <input type="checkbox" checked={p.reveal} onChange={(e) => set({ reveal: e.target.checked })} />
-            Tampilkan poin satu per satu
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={p.cover} onChange={(e) => set({ cover: e.target.checked })} />
-            Sertakan slide sampul
-          </label>
-
           <label className="field">
-            <span>Durasi per slide: {p.secondsPerSlide} detik</span>
-            <input
-              type="range"
-              min={3}
-              max={20}
-              step={1}
-              value={p.secondsPerSlide}
-              onChange={(e) => set({ secondsPerSlide: +e.target.value })}
-            />
+            <span>Ukuran teks: {Math.round(p.textScale * 100)}%</span>
+            <input type="range" min={0.7} max={1.4} step={0.05} value={p.textScale} onChange={(e) => set({ textScale: +e.target.value })} />
           </label>
-
+          <label className="field">
+            <span>Durasi per langkah: {p.secondsPerStep} detik</span>
+            <input type="range" min={2} max={15} step={1} value={p.secondsPerStep} onChange={(e) => set({ secondsPerStep: +e.target.value })} />
+          </label>
           <div className="field">
-            <span>Ekspor</span>
+            <span>Ekspor video</span>
             {exp === null ? (
-              <button className="btn block" disabled={!canVideo || !active.length} onClick={runExport}>
+              <button className="btn block" disabled={!canVideo || !steps.length} onClick={runExport}>
                 ⬇ Ekspor video ({canVideo ? "MP4/WebM" : "tidak didukung"})
               </button>
             ) : (
@@ -283,23 +260,12 @@ export default function PitchPanel({ doc, apply, onClose }: Props) {
                 </div>
               </div>
             )}
-            <p className="muted small">
-              Video direkam real-time sesuai durasi ({totalSec} dtk). Biarkan tab ini tetap terbuka dan terlihat sampai selesai.
-            </p>
+            <p className="muted small">Direkam real-time ({totalSec} dtk), tanpa suara. Biarkan tab tetap terbuka sampai selesai.</p>
           </div>
         </aside>
       </div>
 
-      {present && (
-        <Presenter
-          slides={active}
-          theme={theme}
-          cfg={cfg}
-          startIndex={present.start}
-          autoplay={present.auto}
-          onClose={() => setPresent(null)}
-        />
-      )}
+      {present && <Presenter slides={steps} opts={opts} perStep={p.secondsPerStep} startIndex={present.start} autoplay={present.auto} onClose={() => setPresent(null)} />}
     </div>
   );
 }

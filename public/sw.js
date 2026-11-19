@@ -1,5 +1,5 @@
 /* Service worker MindPitch: offline-first untuk berkas aplikasi. Data peta disimpan di IndexedDB (lokal). */
-const CACHE = "mindpitch-v2";
+const CACHE = "mindpitch-v3";
 const CORE = [
   "./",
   "./index.html",
@@ -15,6 +15,12 @@ self.addEventListener("install", (event) => {
       const cache = await caches.open(CACHE);
       await cache.addAll(CORE);
       // pra-cache aset hasil build (JS/CSS) yang disebut di index.html agar langsung bisa offline
+      try {
+        const list = await (await fetch("./precache.json", { cache: "reload" })).json();
+        await cache.addAll(list.map((f) => new URL(f, self.registration.scope).href));
+      } catch (e) {
+        /* tanpa daftar: aset di-cache saat dipakai */
+      }
       try {
         const res = await fetch("./index.html", { cache: "reload" });
         const html = await res.text();

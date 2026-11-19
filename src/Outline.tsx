@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { MapDoc } from "./types";
+import { Sheet } from "./types";
 
 interface Props {
-  doc: MapDoc;
+  sheet: Sheet;
   selectedId: string | null;
   focusToken: number;
   onSelect(id: string): void;
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function Outline(props: Props) {
-  const { doc, selectedId, focusToken } = props;
+  const { sheet: doc, selectedId, focusToken } = props;
   const wrap = useRef<HTMLDivElement>(null);
 
   const rows: { id: string; depth: number }[] = [];

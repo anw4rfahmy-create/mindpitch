@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MapDoc } from "./types";
+import { Sheet, Workbook } from "./types";
+import { replaceSheet } from "./model";
 import { saveDoc } from "./storage";
 
 interface Snap {
-  nodes: MapDoc["nodes"];
-  layout: MapDoc["layout"];
+  sheets: Workbook["sheets"];
+  activeId: string;
   title: string;
 }
-const snap = (d: MapDoc): Snap => ({ nodes: d.nodes, layout: d.layout, title: d.title });
+const snap = (d: Workbook): Snap => ({ sheets: d.sheets, activeId: d.activeId, title: d.title });
 
-export function useDoc(initial: MapDoc) {
-  const [doc, setDoc] = useState<MapDoc>(initial);
+export function useDoc(initial: Workbook) {
+  const [doc, setDoc] = useState<Workbook>(initial);
   const docRef = useRef(initial);
   const past = useRef<Snap[]>([]);
   const future = useRef<Snap[]>([]);
@@ -18,7 +19,7 @@ export function useDoc(initial: MapDoc) {
   const [saved, setSaved] = useState(true);
 
   /** Terapkan perubahan. history=false untuk perubahan yang tidak perlu undo (mis. pengaturan Pitch). */
-  const apply = useCallback((fn: (d: MapDoc) => MapDoc, history = true) => {
+  const apply = useCallback((fn: (d: Workbook) => Workbook, history = true) => {
     const cur = docRef.current;
     const res = fn(cur);
     if (res === cur) return;
@@ -86,9 +87,16 @@ export function useDoc(initial: MapDoc) {
     };
   }, []);
 
+  /** Ubah lembar aktif saja. */
+  const applySheet = useCallback(
+    (fn: (s: Sheet) => Sheet, history = true) => apply((d) => replaceSheet(d, d.activeId, fn), history),
+    [apply]
+  );
+
   return {
     doc,
     apply,
+    applySheet,
     undo,
     redo,
     canUndo: past.current.length > 0,

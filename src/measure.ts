@@ -45,6 +45,9 @@ export function wrapWith(c: CanvasRenderingContext2D, text: string, maxW: number
 }
 
 const cache = new Map<string, string[]>();
+export function clearMeasureCache() {
+  cache.clear();
+}
 export function wrapCached(font: string, text: string, maxW: number): string[] {
   const key = `${font}|${maxW}|${text}`;
   const hit = cache.get(key);

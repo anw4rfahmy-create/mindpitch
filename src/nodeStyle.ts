@@ -1,14 +1,14 @@
-import { BRANCH_PALETTE, Nodes, branchColor } from "./model";
-import { NodeShape } from "./types";
+import { branchIndex } from "./model";
+import { paletteById } from "./themes";
+import { MNode, NodeShape, Sheet, StructureId } from "./types";
 
 export interface NodeStyle {
-  fill: string; // "none" untuk gaya garis
-  stroke: string;
+  fill: string; // "none" bila tanpa isi
+  stroke: string; // "none" bila tanpa garis
   strokeWidth: number;
   text: string;
   shape: NodeShape;
   branch: string;
-  radius: (h: number) => number;
 }
 
 export function contrastText(hex: string): string {
@@ -18,58 +18,110 @@ export function contrastText(hex: string): string {
   const r = (n >> 16) & 255,
     g = (n >> 8) & 255,
     b = n & 255;
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.6 ? "#0f172a" : "#ffffff";
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#0f172a" : "#ffffff";
 }
 
-const radiusFor = (shape: NodeShape) => (h: number) =>
-  shape === "pill" ? h / 2 : shape === "box" ? 3 : shape === "line" ? 0 : 10;
+export function branchColorOf(sheet: Sheet, id: string): string {
+  if (id === sheet.rootId) return "#334155";
+  const pal = paletteById(sheet.theme).colors;
+  if (!sheet.colored) return pal[0];
+  return pal[branchIndex(sheet.nodes, sheet.rootId, id) % pal.length];
+}
 
-export function styleFor(
-  nodes: Nodes,
-  rootId: string,
-  id: string,
-  depth: number,
-  palette: string[] = BRANCH_PALETTE
-): NodeStyle {
-  const n = nodes[id];
-  const branch = depth === 0 ? "#4f46e5" : branchColor(nodes, rootId, id, palette);
-  const shape: NodeShape = n.shape ?? (depth === 0 ? "pill" : "rounded");
-  let fill: string, stroke: string, text: string, strokeWidth = 1.5;
+/** Bentuk bawaan topik menurut gaya peta, kedalaman, dan struktur. */
+export function defaultShape(sheet: Sheet, depth: number): NodeShape {
+  const ts = sheet.topicStyle;
+  if (depth === 0) return "rounded";
+  if (ts === "box") return "rounded";
+  if (ts === "pill") return "pill";
+  if (ts === "line") return "line";
+  if (ts === "none") return depth === 1 ? "rounded" : "none";
+  // otomatis (gaya XMind): topik utama berwarna, sub-topik teks di atas garis
+  if (sheet.structure === "org-down" || sheet.structure === "org-up") return depth === 1 ? "rounded" : "box";
+  return depth === 1 ? "rounded" : "line";
+}
+
+/** Warna teks untuk topik tanpa isi: kontras terhadap warna latar peta. */
+function plainText(sheet: Sheet): string {
+  return contrastText(sheet.bg.color);
+}
+
+export function styleFor(sheet: Sheet, n: MNode, depth: number): NodeStyle {
+  const branch = branchColorOf(sheet, n.id);
+  const shape: NodeShape = n.shape ?? defaultShape(sheet, depth);
+  const ts = sheet.topicStyle;
+  let fill: string, stroke: string, text: string, strokeWidth = 1.6;
 
   if (depth === 0) {
-    fill = n.color ?? "#4f46e5";
-    stroke = fill;
+    fill = n.color ?? "#ffffff";
+    stroke = n.color ?? "#1e293b";
+    strokeWidth = 3;
     text = contrastText(fill);
-  } else if (depth === 1) {
+  } else if (depth === 1 && ts !== "line") {
     fill = n.color ?? branch;
     stroke = fill;
     text = contrastText(fill);
-  } else {
+  } else if (ts === "box" || ts === "pill" || shape === "rounded" || shape === "box" || shape === "pill" || shape === "ellipse") {
     fill = n.color ?? "#ffffff";
-    stroke = n.color ?? branch;
+    stroke = n.color && n.color !== "#ffffff" ? n.color : branch;
     text = contrastText(fill);
+  } else {
+    fill = "none";
+    stroke = n.color ?? branch;
+    text = plainText(sheet);
   }
 
   if (shape === "line") {
-    // gaya garis bawah: tanpa isi, teks berwarna gelap
     fill = "none";
-    text = "#0f172a";
     stroke = n.color ?? branch;
-    strokeWidth = 2;
+    strokeWidth = 2.2;
+    text = plainText(sheet);
+  } else if (shape === "none") {
+    fill = "none";
+    stroke = "none";
+    text = plainText(sheet);
   }
-  return { fill, stroke, strokeWidth, text, shape, branch, radius: radiusFor(shape) };
+  if (n.textColor) text = n.textColor;
+  return { fill, stroke, strokeWidth, text, shape, branch };
+}
+
+export function radiusFor(shape: NodeShape, h: number): number {
+  switch (shape) {
+    case "pill":
+      return h / 2;
+    case "box":
+      return 3;
+    case "rounded":
+      return 10;
+    default:
+      return 0;
+  }
+}
+
+export function lineStyleFor(sheet: Sheet): "curve" | "elbow" | "round" | "straight" {
+  if (sheet.lineStyle !== "auto") return sheet.lineStyle;
+  const s: StructureId = sheet.structure;
+  if (s.startsWith("mind")) return "curve";
+  if (s.startsWith("org") || s.startsWith("tree") || s === "timeline" || s === "fishbone") return "elbow";
+  if (s.startsWith("logic")) return "round";
+  return "curve";
+}
+
+export function edgeWidth(sheet: Sheet, depth: number): number {
+  const w = sheet.lineWidth;
+  if (w > 0) return Math.max(1, w - Math.max(0, depth - 1) * 0.5);
+  return depth <= 1 ? 3.4 : depth === 2 ? 2.4 : 1.8;
 }
 
 export const NODE_COLORS = [
-  "#6366f1",
-  "#ec4899",
-  "#f59e0b",
-  "#10b981",
-  "#0ea5e9",
-  "#8b5cf6",
-  "#ef4444",
-  "#14b8a6",
+  "#e5534b",
+  "#f08a5d",
+  "#e8b931",
+  "#3fae7f",
+  "#3fb8c4",
+  "#4c8bf5",
+  "#9b6bdf",
+  "#ec6ca5",
   "#64748b",
   "#0f172a",
   "#ffffff",

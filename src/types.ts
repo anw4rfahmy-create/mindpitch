@@ -1,5 +1,37 @@
-export type NodeShape = "rounded" | "pill" | "box" | "line";
-export type LayoutKind = "map" | "right" | "down";
+export type NodeShape = "rounded" | "pill" | "box" | "line" | "none" | "ellipse";
+
+export type StructureId =
+  | "mind-both"
+  | "mind-right"
+  | "mind-left"
+  | "logic-right"
+  | "logic-left"
+  | "logic-both"
+  | "brace-right"
+  | "brace-left"
+  | "org-down"
+  | "org-up"
+  | "tree-right"
+  | "tree-left"
+  | "timeline"
+  | "fishbone";
+
+export type LineStyle = "auto" | "curve" | "elbow" | "round" | "straight";
+export type TopicStyle = "auto" | "box" | "pill" | "line" | "none";
+export type ImgSize = "S" | "M" | "L";
+
+export interface Attachment {
+  id: string; // id berkas di IndexedDB
+  name: string;
+  mime: string;
+  size: number;
+}
+
+export interface NodeImage {
+  fileId: string;
+  ar: number; // lebar / tinggi
+  size: ImgSize;
+}
 
 export interface MNode {
   id: string;
@@ -7,45 +39,82 @@ export interface MNode {
   text: string;
   children: string[];
   collapsed?: boolean;
-  color?: string; // warna isi node
+  color?: string; // warna isi/garis topik
   shape?: NodeShape;
   note?: string;
+  font?: string; // id font khusus topik
+  fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  textColor?: string;
+  image?: NodeImage;
+  attachments?: Attachment[];
 }
 
-export type SlideStyle = "bullets" | "cards" | "map";
-export type Transition = "fade" | "slide" | "none";
+export interface FloatImage {
+  id: string;
+  fileId: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface MapBg {
+  color: string;
+  imageId?: string;
+  fit: "cover" | "contain" | "tile";
+}
+
+export type SlideTransition = "fade" | "slide" | "none";
 
 export interface PitchSettings {
   theme: string;
-  depth: 1 | 2; // 1 = satu slide per cabang utama, 2 = juga per sub-cabang
-  style: SlideStyle;
-  transition: Transition;
-  reveal: boolean; // tampil bertahap
-  secondsPerSlide: number; // untuk ekspor video / auto-play
-  cover: boolean;
-  excluded: string[]; // id node yang tidak dijadikan slide
-  styleOverrides: Record<string, SlideStyle>;
+  bgImageId?: string;
+  bgDim: number; // 0..0.8 lapisan gelap di atas gambar latar
+  focus: boolean; // judul di tengah sebelum pindah ke kiri
+  credit: boolean; // tulisan "Dibuat dengan MindPitch" pada sampul
+  transition: SlideTransition;
+  secondsPerStep: number; // untuk putar otomatis & video
+  textScale: number; // 0.8 .. 1.4
+  excluded: string[]; // id topik yang tidak ikut Pitch
 }
 
-export interface MapDoc {
+export interface Sheet {
   id: string;
   title: string;
   rootId: string;
   nodes: Record<string, MNode>;
-  layout: LayoutKind;
+  structure: StructureId;
+  theme: string; // tema warna cabang
+  colored: boolean;
+  lineStyle: LineStyle;
+  lineWidth: number; // 0 = otomatis
+  topicStyle: TopicStyle;
+  font: string; // id font global
+  bg: MapBg;
+  floats: FloatImage[];
   pitch: PitchSettings;
+}
+
+export interface Workbook {
+  id: string;
+  title: string;
+  sheets: Sheet[];
+  activeId: string;
   createdAt: number;
   updatedAt: number;
 }
 
 export const defaultPitch = (): PitchSettings => ({
-  theme: "terang",
-  depth: 1,
-  style: "bullets",
+  theme: "biru",
+  bgDim: 0.35,
+  focus: true,
+  credit: false,
   transition: "fade",
-  reveal: true,
-  secondsPerSlide: 6,
-  cover: true,
+  secondsPerStep: 3,
+  textScale: 1,
   excluded: [],
-  styleOverrides: {},
 });
+
+export const defaultBg = (): MapBg => ({ color: "#fbfcff", fit: "cover" });

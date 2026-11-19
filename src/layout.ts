@@ -1,225 +1,591 @@
-import { FONT_FAMILY, textWidth, wrapCached } from "./measure";
-import { LayoutKind } from "./types";
-import { Nodes } from "./model";
+import { fontString, isRtl } from "./fonts";
+import { textWidth, wrapCached } from "./measure";
+import { defaultShape, lineStyleFor } from "./nodeStyle";
+import { NodeShape, Sheet } from "./types";
 
-export type Side = "c" | "r" | "l" | "d";
+export type Side = "c" | "r" | "l" | "d" | "u";
 
 export interface LNode {
   id: string;
-  x: number; // kiri
-  y: number; // atas
+  x: number;
+  y: number;
   w: number;
   h: number;
   lines: string[];
   font: string;
   fontSize: number;
   lineH: number;
+  textTop: number; // jarak dari atas topik ke baris pertama
+  img?: { x: number; y: number; w: number; h: number; fileId: string };
   depth: number;
   side: Side;
   parentId: string | null;
-  hasHidden: boolean; // punya anak yang tersembunyi (collapsed)
+  hasKids: boolean;
+  hasHidden: boolean;
+  badge?: { x: number; y: number };
+  rtl: boolean;
+  shape: NodeShape;
+}
+
+export interface LEdge {
+  key: string;
+  childId: string;
+  d: string;
+  kind: "line" | "brace" | "axis";
 }
 
 export interface LayoutResult {
   nodes: Record<string, LNode>;
-  order: string[]; // urutan BFS (untuk reveal bertahap)
+  order: string[];
+  edges: LEdge[];
   bounds: { x: number; y: number; w: number; h: number };
 }
 
-const PAD_X = 14;
-const PAD_Y = 9;
-const MAX_TEXT_W = 200;
+const IMG_W = { S: 90, M: 150, L: 230 } as const;
 
-export function fontFor(depth: number): { font: string; size: number } {
-  if (depth === 0) return { font: `700 20px ${FONT_FAMILY}`, size: 20 };
-  if (depth === 1) return { font: `600 16px ${FONT_FAMILY}`, size: 16 };
-  return { font: `400 14px ${FONT_FAMILY}`, size: 14 };
+type Dir = "r" | "l" | "d" | "u";
+type LStyle = "curve" | "elbow" | "round" | "straight";
+
+interface Ctx {
+  sheet: Sheet;
+  out: Record<string, LNode>;
+  kids: (id: string) => string[];
+  rootId: string;
+  edges: LEdge[];
+  style: LStyle;
 }
 
-function sizeNode(text: string, depth: number) {
-  const { font, size } = fontFor(depth);
-  const lines = wrapCached(font, text, MAX_TEXT_W);
-  const lineH = Math.round(size * 1.3);
-  let widest = 0;
-  for (const l of lines) widest = Math.max(widest, textWidth(font, l));
-  const minW = depth === 0 ? 96 : 56;
+const anchorY = (n: LNode) => (n.shape === "line" ? n.y + n.h : n.y + n.h / 2);
+
+export function link(style: LStyle, x1: number, y1: number, x2: number, y2: number, horiz: boolean): string {
+  if (style === "straight") return `M${x1},${y1} L${x2},${y2}`;
+  if (horiz) {
+    const mx = (x1 + x2) / 2;
+    if (style === "curve") return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    if (Math.abs(y2 - y1) < 1) return `M${x1},${y1} L${x2},${y2}`;
+    if (style === "elbow") return `M${x1},${y1} L${mx},${y1} L${mx},${y2} L${x2},${y2}`;
+    const r = Math.min(10, Math.abs(y2 - y1) / 2, Math.abs(x2 - x1) / 2);
+    const sx = x2 > x1 ? 1 : -1,
+      sy = y2 > y1 ? 1 : -1;
+    return `M${x1},${y1} L${mx - sx * r},${y1} Q${mx},${y1} ${mx},${y1 + sy * r} L${mx},${y2 - sy * r} Q${mx},${y2} ${mx + sx * r},${y2} L${x2},${y2}`;
+  }
+  const my = (y1 + y2) / 2;
+  if (style === "curve") return `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`;
+  if (Math.abs(x2 - x1) < 1) return `M${x1},${y1} L${x2},${y2}`;
+  if (style === "elbow") return `M${x1},${y1} L${x1},${my} L${x2},${my} L${x2},${y2}`;
+  const r = Math.min(10, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2);
+  const sx = x2 > x1 ? 1 : -1,
+    sy = y2 > y1 ? 1 : -1;
+  return `M${x1},${y1} L${x1},${my - sy * r} Q${x1},${my} ${x1 + sx * r},${my} L${x2 - sx * r},${my} Q${x2},${my} ${x2},${my + sy * r} L${x2},${y2}`;
+}
+
+/** Kurung kurawal "{" dengan ujung di x0 menunjuk ke induk; dir=1 anak di kanan, -1 di kiri. */
+export function bracePath(x0: number, y1: number, y2: number, ym: number, dir: 1 | -1): string {
+  const xm = x0 + dir * 8,
+    x1 = x0 + dir * 16,
+    r = 8;
+  if (y2 - y1 < 4 * r) return `M${x0},${ym} L${x1},${ym}`;
+  return (
+    `M${x1},${y1} Q${xm},${y1} ${xm},${y1 + r} L${xm},${ym - r} Q${xm},${ym} ${x0},${ym} ` +
+    `Q${xm},${ym} ${xm},${ym + r} L${xm},${y2 - r} Q${xm},${y2} ${x1},${y2}`
+  );
+}
+
+// ---------------------------------------------------------------- ukuran topik
+function measure(sheet: Sheet, id: string, depth: number): Omit<LNode, "x" | "y" | "side" | "parentId" | "hasKids" | "hasHidden" | "badge"> {
+  const n = sheet.nodes[id];
+  const size = n.fontSize ?? (depth === 0 ? 20 : depth === 1 ? 16 : 14);
+  const bold = n.bold ?? depth <= 1;
+  const font = fontString(n.font ?? sheet.font, bold ? 700 : 400, size, !!n.italic);
+  const shape = n.shape ?? defaultShape(sheet, depth);
+  const rtl = isRtl(n.text);
+  const flat = shape === "line" || shape === "none";
+  const ell = shape === "ellipse";
+  const padX = (flat ? 6 : 14) * (ell ? 1.5 : 1);
+  const padY = (flat ? 5 : 9) * (ell ? 1.35 : 1);
+  const lines = wrapCached(font, n.text, 210);
+  const lineH = Math.round(size * (rtl ? 1.7 : 1.4));
+  let tw = 0;
+  for (const l of lines) tw = Math.max(tw, textWidth(font, l));
+  let imgW = 0,
+    imgH = 0;
+  if (n.image) {
+    imgW = IMG_W[n.image.size] ?? 150;
+    imgH = imgW / (n.image.ar || 1);
+    if (imgH > 230) {
+      imgH = 230;
+      imgW = imgH * n.image.ar;
+    }
+  }
+  const inner = Math.max(tw, imgW);
+  const minW = depth === 0 ? 96 : flat ? 30 : 56;
+  const w = Math.max(minW, Math.ceil(inner) + padX * 2);
+  const h = lines.length * lineH + (imgH ? imgH + 6 : 0) + padY * 2;
   return {
+    id,
+    w,
+    h,
     lines,
     font,
     fontSize: size,
     lineH,
-    w: Math.max(minW, Math.ceil(widest) + PAD_X * 2),
-    h: lines.length * lineH + PAD_Y * 2,
+    textTop: padY + (imgH ? imgH + 6 : 0),
+    img: n.image ? { x: (w - imgW) / 2, y: padY, w: imgW, h: imgH, fileId: n.image.fileId } : undefined,
+    depth,
+    rtl,
+    shape,
   };
 }
 
-interface Opts {
-  ignoreCollapsed?: boolean;
-}
-
-export function computeLayout(
-  nodes: Nodes,
-  rootId: string,
-  kind: LayoutKind,
-  opts: Opts = {}
-): LayoutResult {
+// ---------------------------------------------------------------- tata letak
+export function computeLayout(sheet: Sheet): LayoutResult {
+  const N = sheet.nodes;
+  const rootId = sheet.rootId;
   const out: Record<string, LNode> = {};
-  const order: string[] = [];
-  const root = nodes[rootId];
-  if (!root) return { nodes: out, order, bounds: { x: 0, y: 0, w: 1, h: 1 } };
+  if (!N[rootId]) return { nodes: out, order: [], edges: [], bounds: { x: 0, y: 0, w: 1, h: 1 } };
 
   const kids = (id: string): string[] => {
-    const n = nodes[id];
-    if (!n) return [];
-    if (n.collapsed && !opts.ignoreCollapsed) return [];
-    return n.children.filter((c) => nodes[c]);
+    const n = N[id];
+    return !n || n.collapsed ? [] : n.children.filter((c) => N[c]);
   };
-
-  // ukur semua node yang tampil
-  const walkMeasure = (id: string, depth: number, parentId: string | null) => {
-    const n = nodes[id];
-    const s = sizeNode(n.text, depth);
+  const walk = (id: string, depth: number, parent: string | null) => {
+    const m = measure(sheet, id, depth);
     out[id] = {
-      id,
+      ...m,
       x: 0,
       y: 0,
-      ...s,
-      depth,
       side: "c",
-      parentId,
-      hasHidden: !!n.collapsed && !opts.ignoreCollapsed && n.children.length > 0,
+      parentId: parent,
+      hasKids: N[id].children.some((c) => N[c]),
+      hasHidden: !!N[id].collapsed && N[id].children.some((c) => N[c]),
     };
-    kids(id).forEach((c) => walkMeasure(c, depth + 1, id));
+    kids(id).forEach((c) => walk(c, depth + 1, id));
   };
-  walkMeasure(rootId, 0, null);
+  walk(rootId, 0, null);
 
-  const horizontalGap = 56;
-  const verticalGapDepth = 46;
-  const crossGapH = 14; // jarak antar saudara pada layout horizontal
-  const crossGapV = 22; // jarak antar saudara pada layout vertikal
+  const ctx: Ctx = { sheet, out, kids, rootId, edges: [], style: lineStyleFor(sheet) };
+  switch (sheet.structure) {
+    case "mind-right":
+      horizontal(ctx, "right", false);
+      break;
+    case "mind-left":
+      horizontal(ctx, "left", false);
+      break;
+    case "logic-right":
+      horizontal(ctx, "right", false);
+      break;
+    case "logic-left":
+      horizontal(ctx, "left", false);
+      break;
+    case "logic-both":
+      horizontal(ctx, "both", false);
+      break;
+    case "brace-right":
+      horizontal(ctx, "right", true);
+      break;
+    case "brace-left":
+      horizontal(ctx, "left", true);
+      break;
+    case "org-down":
+      vertical(ctx, false);
+      break;
+    case "org-up":
+      vertical(ctx, true);
+      break;
+    case "tree-right":
+      treeLayout(ctx, "r");
+      break;
+    case "tree-left":
+      treeLayout(ctx, "l");
+      break;
+    case "timeline":
+      timeline(ctx);
+      break;
+    case "fishbone":
+      fishbone(ctx);
+      break;
+    default:
+      horizontal(ctx, "both", false);
+  }
+  return finish(ctx);
+}
 
-  const extMemo = new Map<string, number>();
-  const ext = (id: string, vertical: boolean): number => {
-    const key = id + (vertical ? "v" : "h");
-    const hit = extMemo.get(key);
-    if (hit !== undefined) return hit;
+function finish(ctx: Ctx): LayoutResult {
+  const { out, rootId, sheet } = ctx;
+  const both = sheet.structure === "mind-both" || sheet.structure === "logic-both" || !sheet.structure;
+  for (const id in out) {
     const n = out[id];
-    const own = vertical ? n.w : n.h;
-    const ch = kids(id);
-    let r = own;
-    if (ch.length) {
-      const gap = vertical ? crossGapV : crossGapH;
-      const sum = ch.reduce((a, c) => a + ext(c, vertical), 0) + gap * (ch.length - 1);
-      r = Math.max(own, sum);
+    if (!n.hasKids || n.badge) continue;
+    if (id === rootId) {
+      const s = sheet.structure;
+      if (both) continue;
+      if (s.endsWith("-left")) n.badge = { x: n.x - 13, y: anchorY(n) };
+      else if (s === "org-down") n.badge = { x: n.x + n.w / 2, y: n.y + n.h + 13 };
+      else if (s === "org-up") n.badge = { x: n.x + n.w / 2, y: n.y - 13 };
+      else n.badge = { x: n.x + n.w + 13, y: anchorY(n) };
+      continue;
     }
-    extMemo.set(key, r);
+    if (n.side === "r") n.badge = { x: n.x + n.w + 13, y: anchorY(n) };
+    else if (n.side === "l") n.badge = { x: n.x - 13, y: anchorY(n) };
+    else if (n.side === "d") n.badge = { x: n.x + n.w / 2, y: n.y + n.h + 13 };
+    else if (n.side === "u") n.badge = { x: n.x + n.w / 2, y: n.y - 13 };
+  }
+  const order: string[] = [];
+  const q = [rootId];
+  while (q.length) {
+    const id = q.shift()!;
+    order.push(id);
+    ctx.kids(id).forEach((c) => q.push(c));
+  }
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const id in out) {
+    const n = out[id];
+    x0 = Math.min(x0, n.x - (n.badge && n.side === "l" ? 24 : 0));
+    y0 = Math.min(y0, n.y);
+    x1 = Math.max(x1, n.x + n.w + (n.badge && n.side === "r" ? 24 : 0));
+    y1 = Math.max(y1, n.y + n.h);
+  }
+  if (!isFinite(x0)) return { nodes: out, order, edges: ctx.edges, bounds: { x: 0, y: 0, w: 1, h: 1 } };
+  return { nodes: out, order, edges: ctx.edges, bounds: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } };
+}
+
+// ---------------------------------------------------------------- horizontal (mind map, logic chart, brace map)
+function horizontal(ctx: Ctx, mode: "right" | "left" | "both", brace: boolean) {
+  const { out, kids, rootId } = ctx;
+  const gapX = brace ? 74 : 58;
+  const crossGap = 14;
+  const memo = new Map<string, number>();
+  const ext = (id: string): number => {
+    const hit = memo.get(id);
+    if (hit !== undefined) return hit;
+    const ch = kids(id);
+    let r = out[id].h;
+    if (ch.length) r = Math.max(r, ch.reduce((a, c) => a + ext(c), 0) + crossGap * (ch.length - 1));
+    memo.set(id, r);
     return r;
   };
-
-  // Tempatkan node + keturunannya. depthPos = tepi awal sumbu kedalaman, crossCenter = pusat sumbu silang.
-  const place = (id: string, dir: "r" | "l" | "d", depthPos: number, crossCenter: number) => {
-    const n = out[id];
-    n.side = dir;
-    if (dir === "r") {
-      n.x = depthPos;
-      n.y = crossCenter - n.h / 2;
-    } else if (dir === "l") {
-      n.x = depthPos - n.w;
-      n.y = crossCenter - n.h / 2;
-    } else {
-      n.y = depthPos;
-      n.x = crossCenter - n.w / 2;
-    }
-    placeChildren(id, dir, crossCenter);
-  };
-
-  const placeChildren = (id: string, dir: "r" | "l" | "d", crossCenter: number, only?: string[]) => {
-    const n = out[id];
+  const placeKids = (id: string, dir: "r" | "l", center: number, only?: string[]) => {
+    const p = out[id];
     const ch = only ?? kids(id);
     if (!ch.length) return;
-    const vertical = dir === "d";
-    const gap = vertical ? crossGapV : crossGapH;
-    const total = ch.reduce((a, c) => a + ext(c, vertical), 0) + gap * (ch.length - 1);
-    let cur = crossCenter - total / 2;
+    const total = ch.reduce((a, c) => a + ext(c), 0) + crossGap * (ch.length - 1);
+    let cur = center - total / 2;
     for (const c of ch) {
-      const e = ext(c, vertical);
-      const center = cur + e / 2;
-      let depthPos: number;
-      if (dir === "r") depthPos = n.x + n.w + horizontalGap;
-      else if (dir === "l") depthPos = n.x - horizontalGap;
-      else depthPos = n.y + n.h + verticalGapDepth;
-      place(c, dir, depthPos, center);
-      cur += e + gap;
+      const e = ext(c);
+      const cn = out[c];
+      cn.side = dir;
+      cn.x = dir === "r" ? p.x + p.w + gapX : p.x - gapX - cn.w;
+      cn.y = cur + e / 2 - cn.h / 2;
+      placeKids(c, dir, cur + e / 2);
+      cur += e + crossGap;
     }
   };
-
-  // root di tengah (0,0)
   const r = out[rootId];
   r.x = -r.w / 2;
   r.y = -r.h / 2;
-  r.side = "c";
   const top = kids(rootId);
-
-  if (kind === "right") {
-    placeChildren(rootId, "r", 0);
-  } else if (kind === "down") {
-    r.x = -r.w / 2;
-    r.y = 0;
-    placeChildren(rootId, "d", 0);
-  } else {
-    // peta dua sisi: bagi cabang agar tinggi kiri dan kanan seimbang
-    const total = top.reduce((a, c) => a + ext(c, false), 0);
+  if (mode === "right") placeKids(rootId, "r", 0);
+  else if (mode === "left") placeKids(rootId, "l", 0);
+  else {
+    const total = top.reduce((a, c) => a + ext(c), 0);
     let acc = 0;
-    const right: string[] = [];
-    const left: string[] = [];
+    const right: string[] = [],
+      left: string[] = [];
     for (const c of top) {
-      const e = ext(c, false);
+      const e = ext(c);
       if (acc + e / 2 <= total / 2 || right.length === 0) right.push(c);
       else left.push(c);
       acc += e;
     }
-    placeChildren(rootId, "r", 0, right);
-    placeChildren(rootId, "l", 0, left);
+    placeKids(rootId, "r", 0, right);
+    placeKids(rootId, "l", 0, left);
   }
 
-  // urutan BFS
-  const queue = [rootId];
-  while (queue.length) {
-    const id = queue.shift()!;
-    order.push(id);
-    queue.push(...kids(id));
-  }
-
-  // batas
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
+  // garis penghubung
+  const groups = new Map<string, string[]>();
   for (const id in out) {
-    const n = out[id];
-    minX = Math.min(minX, n.x);
-    minY = Math.min(minY, n.y);
-    maxX = Math.max(maxX, n.x + n.w);
-    maxY = Math.max(maxY, n.y + n.h);
+    const c = out[id];
+    if (!c.parentId) continue;
+    const p = out[c.parentId];
+    const horizSide = c.side === "r" ? 1 : -1;
+    if (brace) {
+      const k = `${p.id}|${horizSide}`;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k)!.push(id);
+      continue;
+    }
+    const x1 = horizSide === 1 ? p.x + p.w : p.x;
+    const x2 = horizSide === 1 ? c.x : c.x + c.w;
+    ctx.edges.push({ key: "e:" + id, childId: id, kind: "line", d: link(ctx.style, x1, anchorY(p), x2, anchorY(c), true) });
   }
-  return { nodes: out, order, bounds: { x: minX, y: minY, w: maxX - minX, h: maxY - minY } };
+  if (brace) {
+    for (const [k, list] of groups) {
+      const [pid, s] = k.split("|");
+      const dir = (Number(s) === 1 ? 1 : -1) as 1 | -1;
+      const p = out[pid];
+      const ym = p.y + p.h / 2;
+      const y1 = Math.min(...list.map((i) => out[i].y));
+      const y2 = Math.max(...list.map((i) => out[i].y + out[i].h));
+      const x0 = dir === 1 ? p.x + p.w + 12 : p.x - 12;
+      const pe = dir === 1 ? p.x + p.w : p.x;
+      ctx.edges.push({
+        key: "b:" + k,
+        childId: pid,
+        kind: "brace",
+        d: `M${pe},${ym} L${x0},${ym} ` + bracePath(x0, y1, y2, ym, dir),
+      });
+    }
+  }
 }
 
-/** Path SVG (juga valid untuk Path2D) dari induk ke anak. */
-export function edgePath(p: LNode, c: LNode): string {
-  if (c.side === "d") {
-    const x1 = p.x + p.w / 2;
-    const y1 = p.y + p.h;
-    const x2 = c.x + c.w / 2;
-    const y2 = c.y;
-    const my = (y1 + y2) / 2;
-    return `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`;
+// ---------------------------------------------------------------- bagan organisasi
+function vertical(ctx: Ctx, up: boolean) {
+  const { out, kids, rootId } = ctx;
+  const gapY = 50,
+    crossGap = 24;
+  const memo = new Map<string, number>();
+  const ext = (id: string): number => {
+    const hit = memo.get(id);
+    if (hit !== undefined) return hit;
+    const ch = kids(id);
+    let r = out[id].w;
+    if (ch.length) r = Math.max(r, ch.reduce((a, c) => a + ext(c), 0) + crossGap * (ch.length - 1));
+    memo.set(id, r);
+    return r;
+  };
+  const placeKids = (id: string, center: number) => {
+    const p = out[id];
+    const ch = kids(id);
+    if (!ch.length) return;
+    const total = ch.reduce((a, c) => a + ext(c), 0) + crossGap * (ch.length - 1);
+    let cur = center - total / 2;
+    for (const c of ch) {
+      const e = ext(c);
+      const cn = out[c];
+      cn.side = up ? "u" : "d";
+      cn.x = cur + e / 2 - cn.w / 2;
+      cn.y = up ? p.y - gapY - cn.h : p.y + p.h + gapY;
+      placeKids(c, cur + e / 2);
+      cur += e + crossGap;
+    }
+  };
+  const r = out[rootId];
+  r.x = -r.w / 2;
+  r.y = up ? -r.h : 0;
+  placeKids(rootId, 0);
+  for (const id in out) {
+    const c = out[id];
+    if (!c.parentId) continue;
+    const p = out[c.parentId];
+    const x1 = p.x + p.w / 2,
+      x2 = c.x + c.w / 2;
+    const y1 = up ? p.y : p.y + p.h,
+      y2 = up ? c.y + c.h : c.y;
+    ctx.edges.push({ key: "e:" + id, childId: id, kind: "line", d: link(ctx.style, x1, y1, x2, y2, false) });
   }
-  const right = c.side === "r";
-  const x1 = right ? p.x + p.w : p.x;
-  const y1 = p.y + p.h / 2;
-  const x2 = right ? c.x : c.x + c.w;
-  const y2 = c.y + c.h / 2;
-  const mx = (x1 + x2) / 2;
-  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+}
+
+// ---------------------------------------------------------------- pohon bertingkat (dipakai juga oleh linimasa & tulang ikan)
+const INDENT = 26;
+const TREE_GAP = 8;
+
+function makeTree(ctx: Ctx) {
+  const { out, kids } = ctx;
+  const memo = new Map<string, number>();
+  const height = (id: string): number => {
+    const hit = memo.get(id);
+    if (hit !== undefined) return hit;
+    const ch = kids(id);
+    let r = out[id].h;
+    if (ch.length) r += 8 + ch.reduce((a, c) => a + height(c), 0) + TREE_GAP * (ch.length - 1);
+    memo.set(id, r);
+    return r;
+  };
+  /** ax = tepi kiri (arah r) atau tepi kanan (arah l). Mengembalikan tinggi blok. */
+  const place = (id: string, ax: number, y: number, dir: "r" | "l"): void => {
+    const n = out[id];
+    n.side = dir;
+    n.x = dir === "r" ? ax : ax - n.w;
+    n.y = y;
+    let cy = y + n.h + 8;
+    for (const c of kids(id)) {
+      place(c, dir === "r" ? ax + INDENT : ax - INDENT, cy, dir);
+      cy += height(c) + TREE_GAP;
+    }
+    if (n.hasKids && !n.hasHidden) n.badge = { x: dir === "r" ? n.x + 14 : n.x + n.w - 14, y: n.y + n.h + 10 };
+    else if (n.hasHidden) n.badge = { x: dir === "r" ? n.x + 14 : n.x + n.w - 14, y: n.y + n.h + 10 };
+  };
+  const edges = (id: string, dir: "r" | "l") => {
+    const p = out[id];
+    const sx = dir === "r" ? p.x + 14 : p.x + p.w - 14;
+    for (const c of kids(id)) {
+      const cn = out[c];
+      const x2 = dir === "r" ? cn.x : cn.x + cn.w;
+      const y2 = anchorY(cn);
+      const y1 = p.y + p.h;
+      const sg = dir === "r" ? 1 : -1;
+      let d: string;
+      if (ctx.style === "straight") d = `M${sx},${y1} L${x2},${y2}`;
+      else if (ctx.style === "curve") d = `M${sx},${y1} Q${sx},${y2} ${x2},${y2}`;
+      else if (ctx.style === "round") {
+        const r = Math.min(10, Math.abs(x2 - sx), Math.max(0, y2 - y1));
+        d = `M${sx},${y1} L${sx},${y2 - r} Q${sx},${y2} ${sx + sg * r},${y2} L${x2},${y2}`;
+      } else d = `M${sx},${y1} L${sx},${y2} L${x2},${y2}`;
+      ctx.edges.push({ key: "e:" + c, childId: c, kind: "line", d });
+      edges(c, dir);
+    }
+  };
+  return { height, place, edges };
+}
+
+function treeLayout(ctx: Ctx, dir: "r" | "l") {
+  const t = makeTree(ctx);
+  const r = ctx.out[ctx.rootId];
+  t.place(ctx.rootId, 0, 0, dir);
+  r.side = "c";
+  t.edges(ctx.rootId, dir);
+}
+
+// ---------------------------------------------------------------- linimasa
+function timeline(ctx: Ctx) {
+  const { out, kids, rootId } = ctx;
+  const t = makeTree(ctx);
+  const r = out[rootId];
+  r.x = 0;
+  r.y = -r.h / 2;
+  const mains = kids(rootId);
+  let prevMainRight = r.x + r.w + 24;
+  const ext = { up: -Infinity, down: -Infinity };
+  let axisEnd = r.x + r.w + 40;
+
+  mains.forEach((mid, i) => {
+    const m = out[mid];
+    const above = i % 2 === 0;
+    const side = above ? "up" : "down";
+    const cx = Math.max(prevMainRight + 34 + m.w / 2, ext[side] + 10);
+    m.x = cx - m.w / 2;
+    m.y = -m.h / 2;
+    m.side = above ? "u" : "d";
+    const ch = kids(mid);
+    const H = ch.reduce((a, c) => a + t.height(c), 0) + TREE_GAP * Math.max(0, ch.length - 1);
+    let y = above ? m.y - 28 - H : m.y + m.h + 28;
+    const startY = y;
+    let right = cx + m.w / 2;
+    for (const c of ch) {
+      t.place(c, cx + 16, y, "r");
+      y += t.height(c) + TREE_GAP;
+    }
+    for (const c of ch) {
+      const sub: string[] = [c];
+      while (sub.length) {
+        const s = sub.pop()!;
+        right = Math.max(right, out[s].x + out[s].w + (out[s].hasKids ? 8 : 0));
+        kids(s).forEach((k) => sub.push(k));
+      }
+    }
+    // garis dari topik utama ke anak-anaknya
+    const y1 = above ? m.y : m.y + m.h;
+    for (const c of ch) {
+      const cn = out[c];
+      ctx.edges.push({ key: "e:" + c, childId: c, kind: "line", d: `M${cx},${y1} L${cx},${anchorY(cn)} L${cn.x},${anchorY(cn)}` });
+      t.edges(c, "r");
+    }
+    if (m.hasKids) m.badge = { x: cx, y: above ? m.y - 13 : m.y + m.h + 13 };
+    void startY;
+    prevMainRight = cx + m.w / 2;
+    ext[side] = Math.max(ext[side], right);
+    axisEnd = Math.max(axisEnd, cx + m.w / 2 + 40);
+  });
+  ctx.edges.unshift({ key: "axis", childId: rootId, kind: "axis", d: `M${r.x + r.w},0 L${axisEnd},0` });
+}
+
+// ---------------------------------------------------------------- tulang ikan
+function fishbone(ctx: Ctx) {
+  const { out, kids, rootId } = ctx;
+  const t = makeTree(ctx);
+  const r = out[rootId];
+  r.x = 0;
+  r.y = -r.h / 2;
+  const mains = kids(rootId);
+
+  interface Bone {
+    id: string;
+    above: boolean;
+    L: number;
+    s: number;
+    ids: string[];
+    rows: string[];
+    minX: number;
+    maxX: number;
+  }
+  const bones: Bone[] = [];
+  // 1) susun tiap tulang relatif terhadap titik sambung di tulang punggung (xs = 0)
+  mains.forEach((mid, i) => {
+    const m = out[mid];
+    const above = i % 2 === 0;
+    const rows = kids(mid);
+    const H = rows.reduce((a, c) => a + t.height(c), 0) + TREE_GAP * Math.max(0, rows.length - 1);
+    const L = Math.max(70, H + 44);
+    const s = L * 0.5;
+    const boneX = (y: number) => -s * (Math.abs(y) / L);
+    m.side = above ? "u" : "d";
+    m.x = -s - m.w / 2;
+    m.y = above ? -L - m.h : L;
+    let y = above ? -L + 22 : 22;
+    const ids: string[] = [mid];
+    for (const c of rows) {
+      t.place(c, boneX(y + out[c].h / 2) - 14, y, "l");
+      y += t.height(c) + TREE_GAP;
+    }
+    let minX = m.x,
+      maxX = m.x + m.w;
+    for (const c of rows) {
+      const stack = [c];
+      while (stack.length) {
+        const s2 = stack.pop()!;
+        ids.push(s2);
+        minX = Math.min(minX, out[s2].x);
+        maxX = Math.max(maxX, out[s2].x + out[s2].w);
+        kids(s2).forEach((k) => stack.push(k));
+      }
+    }
+    bones.push({ id: mid, above, L, s, ids, rows, minX, maxX: Math.max(maxX, 0) });
+  });
+
+  // 2) letakkan pasangan tulang dari kepala ke ekor
+  let xs = 0;
+  let prevLeft = r.x - 46;
+  let tail = r.x - 40;
+  for (let i = 0; i < bones.length; i += 2) {
+    const pair = bones.slice(i, i + 2);
+    const maxX = Math.max(...pair.map((b) => b.maxX));
+    const minX = Math.min(...pair.map((b) => b.minX));
+    xs = prevLeft - 20 - maxX;
+    for (const b of pair) {
+      for (const id of b.ids) out[id].x += xs;
+      for (const id of b.ids) if (out[id].badge) out[id].badge = { x: out[id].badge!.x + xs, y: out[id].badge!.y };
+      const boneX = (y: number) => xs - b.s * (Math.abs(y) / b.L);
+      const m = out[b.id];
+      const bx = xs - b.s;
+      ctx.edges.push({
+        key: "e:" + b.id,
+        childId: b.id,
+        kind: "line",
+        d: `M${bx},${b.above ? m.y + m.h : m.y} L${xs},0`,
+      });
+      for (const c of b.rows) {
+        const cn = out[c];
+        const y = anchorY(cn);
+        ctx.edges.push({ key: "e:" + c, childId: c, kind: "line", d: `M${cn.x + cn.w},${y} L${boneX(y)},${y}` });
+        t.edges(c, "l");
+      }
+      if (m.hasKids) m.badge = { x: bx, y: b.above ? m.y - 13 : m.y + m.h + 13 };
+    }
+    prevLeft = xs + minX;
+    tail = Math.min(tail, xs + minX - 20);
+  }
+  ctx.edges.unshift({ key: "axis", childId: rootId, kind: "axis", d: `M${tail},0 L${r.x},0` });
 }

@@ -1,46 +1,32 @@
-# MindPitch
+# MindPitch (v2)
 
-Aplikasi peta pikiran (mind map) berbentuk PWA dengan fitur **Pitch**: peta otomatis menjadi slide, bisa dipresentasikan, dan diekspor ke video.
+Aplikasi PWA peta pikiran bergaya XMind, dengan **Pitch** (presentasi & video). Berjalan offline, data tersimpan di perangkat (IndexedDB).
 
 ## Menjalankan
-
 ```bash
 npm install
-npm run dev        # mode pengembangan
-npm run build      # build produksi ke folder dist/
-npm run preview    # uji hasil build (service worker aktif di build produksi)
+npm run dev        # pengembangan
+npm run build      # produksi (hasil di dist/, termasuk precache.json untuk offline)
+npm run preview    # uji hasil build; pasang sebagai aplikasi lewat Chrome/Edge
 ```
+Untuk dipasang di ponsel, sajikan folder `dist/` lewat HTTPS (Netlify, Vercel, GitHub Pages, dsb.).
 
-Hasil `dist/` bisa di-hosting di mana saja yang memakai HTTPS (Vercel, Netlify, GitHub Pages, dll.).
-Setelah dibuka di Chrome/Edge/Safari, aplikasi bisa dipasang ke layar utama dan berjalan offline.
+## Yang baru di v2
+1. **Lembar (sheet)** di kiri bawah seperti Excel/XMind: satu berkas berisi banyak peta. Klik `+` untuk menambah, klik dua kali untuk ganti nama, menu `⋯` / klik kanan untuk gandakan, geser, hapus.
+2. **Tombol ⊕ / ⊖ pada topik** untuk menampilkan/menyembunyikan cabang (juga tombol Spasi). Di panel Format › Peta ada *Buka semua, Lipat semua, Level 1–4* untuk kelas interaktif.
+3. **Pitch ala XMind (drill-down)**: judul di tengah → bergeser ke kiri dengan kurung kurawal → anak muncul satu per satu → menyelam ke cabang berikutnya; daftar ▶ untuk cabang berisi poin; topik induk bergaris bawah di kiri atas. Gerak antar langkah mulus, otomatis dicerminkan untuk teks Arab (RTL). Bisa mulai dari topik terpilih, memilih topik yang disertakan, tema, gambar latar, ekspor video MP4/WebM.
+4. **Lampiran per topik**: gambar, PDF, PPT, Word, Excel, audio, video (ikon 📎 pada topik). PDF/gambar tampil langsung, PPT dll. diunduh/dibuka dengan aplikasinya.
+5. **Gambar**: gambar di dalam topik (S/M/L), gambar tambahan bebas yang bisa diseret & diubah ukuran, gambar/warna latar peta, gambar latar Pitch.
+6. **14 struktur**: peta pikiran (2 sisi/kanan/kiri), bagan logika (kanan/kiri/dua sisi), kurung kurawal (kanan/kiri), organisasi (bawah/atas), pohon (kanan/kiri), linimasa, tulang ikan. Plus gaya garis, ketebalan, bentuk topik, 6 tema warna.
+7. **Font**: Arab (Amiri, Scheherazade New, Noto Naskh, Cairo, Tajawal, Aref Ruqaa) dan Indonesia/Latin (Inter, Poppins, Nunito, Merriweather, Patrick Hand), global per lembar dan per topik. Font ikut ter-bundel sehingga bekerja offline.
 
-## Fitur
+## Berkas
+- `.mindpitch` = zip berisi semua lembar + lampiran (cadangan penuh). Impor dari beranda.
+- Ekspor lembar aktif: PNG, SVG, Markdown. Impor juga Markdown/teks berindentasi dan JSON.
 
-- Editor: tambah/ubah/hapus topik, drag & drop untuk pindah induk, lipat/buka, zoom & pan (roda mouse, pinch), undo/redo, warna, bentuk, catatan.
-- Tata letak: peta dua sisi, bagan logika, bagan organisasi. Mode outline untuk mengetik cepat.
-- Simpan otomatis di perangkat (IndexedDB). Impor/ekspor JSON, Markdown, PNG, SVG.
-- **Pitch**: slide dari cabang utama (atau sub-cabang), 5 tema, 3 gaya isi (poin, kartu, peta), transisi, tampil bertahap, catatan pembicara, mode presentasi layar penuh, putar otomatis, ekspor video (MP4/WebM, direkam real-time).
+## Pintasan
+Tab = anak · Enter = saudara · F2 = ubah · Spasi = lipat/buka · Delete = hapus · Alt+↑↓←→ = urutan/indentasi · Ctrl+Z/Y · Ctrl+0 = pas layar.
+Pitch: ←/→ atau ketuk, `A` putar otomatis, `N` catatan, Esc keluar.
 
-## Pintasan keyboard
-
-| Tombol | Aksi |
-| --- | --- |
-| Tab / Enter | Tambah topik anak / saudara |
-| F2 atau ketuk dua kali | Ubah teks |
-| Delete | Hapus topik |
-| Spasi | Lipat/buka cabang |
-| Panah | Pindah pilihan |
-| Alt + panah | Ubah urutan / indent / outdent |
-| Ctrl+Z / Ctrl+Y | Urungkan / ulangi |
-| Ctrl+0, Ctrl +/- | Pas layar, zoom |
-
-Presentasi: panah/spasi untuk maju-mundur, `A` otomatis, `N` catatan, `Esc` keluar.
-
-## Struktur kode
-
-- `src/model.ts` operasi pohon, `src/layout.ts` algoritma tata letak
-- `src/Canvas.tsx` kanvas SVG, `src/Editor.tsx` antarmuka editor
-- `src/slides.ts`, `src/pitchRender.ts`, `src/pitchPlayer.ts`, `src/videoExport.ts` fitur Pitch
-- `public/sw.js`, `public/manifest.webmanifest` bagian PWA
-
-Nama aplikasi bisa diganti di `index.html`, `public/manifest.webmanifest`, dan `src/Home.tsx`.
+## Belum ada
+Ringkasan (Summary), Batas (Boundary), dan Relasi dari toolbar XMind; suara pada video Pitch.

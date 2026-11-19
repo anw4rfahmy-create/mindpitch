@@ -1,7 +1,6 @@
-import { PitchCfg, frameAt, totalSeconds } from "./pitchPlayer";
-import { SH, SW } from "./pitchRender";
-import { Slide } from "./slides";
-import { Theme } from "./themes";
+import { FrameOpts, SH, SW, drawFrame } from "./pitchRender";
+import { TRANS_SEC } from "./pitchPlayer";
+import { Step } from "./pitchScenes";
 
 export interface VideoResult {
   blob: Blob;
@@ -21,48 +20,43 @@ export function pickVideoMime(): { mime: string; ext: "mp4" | "webm" } | null {
   return null;
 }
 
-/**
- * Merekam linimasa Pitch ke video secara real-time dari kanvas.
- * Tab harus tetap terbuka selama proses berjalan.
- */
+export const videoSeconds = (n: number, perStep: number) => Math.max(1, n) * perStep + 0.8;
+
+/** Merekam rangkaian langkah Pitch (termasuk gerak antar langkah) ke video, real-time dari kanvas. */
 export async function exportVideo(
-  slides: Slide[],
-  theme: Theme,
-  cfg: PitchCfg,
-  opts: { onProgress?: (p: number) => void; signal?: AbortSignal; fps?: number } = {}
+  steps: Step[],
+  opts: FrameOpts,
+  perStep: number,
+  cb: { onProgress?: (p: number) => void; signal?: AbortSignal; fps?: number } = {}
 ): Promise<VideoResult> {
   const pick = pickVideoMime();
   if (!pick) throw new Error("Browser ini tidak mendukung perekaman video (MediaRecorder).");
-  if (!slides.length) throw new Error("Tidak ada slide untuk diekspor.");
-
-  const fps = opts.fps ?? 30;
+  if (!steps.length) throw new Error("Tidak ada langkah untuk diekspor.");
+  const fps = cb.fps ?? 30;
   const canvas = document.createElement("canvas");
   canvas.width = SW;
   canvas.height = SH;
   const ctx = canvas.getContext("2d")!;
-  frameAt(ctx, slides, theme, cfg, 0);
+  drawFrame(ctx, null, steps[0], 1, opts);
 
   const stream = canvas.captureStream(fps);
   const rec = new MediaRecorder(stream, { mimeType: pick.mime, videoBitsPerSecond: 6_000_000 });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const stopped = new Promise<void>((res) => (rec.onstop = () => res()));
-
-  const dur = totalSeconds(slides.length, cfg);
-  const total = dur + 0.6; // tahan bingkai terakhir sebentar
+  const total = videoSeconds(steps.length, perStep);
   rec.start(250);
   const t0 = performance.now();
-
   try {
     await new Promise<void>((resolve, reject) => {
       const tick = () => {
-        if (opts.signal?.aborted) {
-          reject(new DOMException("Dibatalkan", "AbortError"));
-          return;
-        }
+        if (cb.signal?.aborted) return reject(new DOMException("Dibatalkan", "AbortError"));
         const t = (performance.now() - t0) / 1000;
-        frameAt(ctx, slides, theme, cfg, Math.min(t, dur));
-        opts.onProgress?.(Math.min(1, t / total));
+        const i = Math.min(steps.length - 1, Math.floor(t / perStep));
+        const local = t - i * perStep;
+        const tr = i > 0 ? Math.min(1, local / TRANS_SEC) : 1;
+        drawFrame(ctx, i > 0 && tr < 1 ? steps[i - 1] : null, steps[i], tr, opts);
+        cb.onProgress?.(Math.min(1, t / total));
         if (t >= total) resolve();
         else setTimeout(tick, 1000 / fps);
       };

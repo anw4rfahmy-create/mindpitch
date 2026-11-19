@@ -1,19 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PitchCfg, Player } from "./pitchPlayer";
-import { SH, SW } from "./pitchRender";
-import { Slide } from "./slides";
-import { Theme } from "./themes";
+import { Player } from "./pitchPlayer";
+import { FrameOpts, SH, SW } from "./pitchRender";
+import { Step } from "./pitchScenes";
 
 interface Props {
-  slides: Slide[];
-  theme: Theme;
-  cfg: PitchCfg;
+  slides: Step[];
+  opts: FrameOpts;
+  perStep: number;
   startIndex?: number;
   autoplay?: boolean;
   onClose(): void;
 }
 
-export default function Presenter({ slides, theme, cfg, startIndex = 0, autoplay, onClose }: Props) {
+export default function Presenter({ slides, opts, perStep, startIndex = 0, autoplay, onClose }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const player = useRef<Player | null>(null);
@@ -26,7 +25,7 @@ export default function Presenter({ slides, theme, cfg, startIndex = 0, autoplay
   const swipe = useRef<{ x: number; y: number } | null>(null);
 
   if (!player.current) {
-    const p = new Player(slides, theme, cfg);
+    const p = new Player(slides, opts, perStep);
     p.index = Math.min(startIndex, slides.length - 1);
     player.current = p;
   }
@@ -56,8 +55,8 @@ export default function Presenter({ slides, theme, cfg, startIndex = 0, autoplay
 
   // perbarui data bila berubah
   useEffect(() => {
-    player.current!.setSlides(slides, theme, cfg);
-  }, [slides, theme, cfg]);
+    player.current!.setData(slides, opts, perStep);
+  }, [slides, opts, perStep]);
 
   // putar otomatis
   useEffect(() => {
@@ -134,11 +133,11 @@ export default function Presenter({ slides, theme, cfg, startIndex = 0, autoplay
           prev();
           break;
         case "Home":
-          player.current!.goto(0);
+          player.current!.goto(0, performance.now(), false);
           setAuto(false);
           break;
         case "End":
-          player.current!.goto(slides.length - 1);
+          player.current!.goto(slides.length - 1, performance.now(), false);
           setAuto(false);
           break;
         case "Escape":
