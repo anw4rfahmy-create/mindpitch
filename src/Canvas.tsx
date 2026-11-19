@@ -457,8 +457,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         style={{ cursor: "pointer" }}
       >
         <circle r={13} fill="transparent" />
-        <circle r={8.5} fill="#fff" stroke={color} strokeWidth={1.6} />
-        <path d={collapsed ? "M-4,0 H4 M0,-4 V4" : "M-4,0 H4"} stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+        <circle r={9.5} fill="#fff" stroke={color} strokeWidth={2} />
+        <path d={collapsed ? "M-4.5,0 H4.5 M0,-4.5 V4.5" : "M-4.5,0 H4.5"} stroke={color} strokeWidth={2.2} strokeLinecap="round" />
       </g>
     );
   });
