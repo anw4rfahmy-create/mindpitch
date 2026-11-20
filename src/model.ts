@@ -1,3 +1,4 @@
+import { normalizeTable, templateTable, TableTemplate } from "./table";
 import { MNode, Sheet, StructureId, Workbook, defaultBg, defaultPitch } from "./types";
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -23,6 +24,12 @@ export function newSheet(title = "Lembar 1", rootText = "Topik utama", structure
     floats: [],
     pitch: defaultPitch(),
   };
+}
+
+export function newTableSheet(title: string, tpl: TableTemplate): Sheet {
+  const s = newSheet(title, title);
+  s.table = templateTable(tpl);
+  return s;
 }
 
 export function newWorkbook(title = "Berkas baru"): Workbook {
@@ -298,6 +305,7 @@ function normalizeSheet(raw: any): Sheet | null {
     title: String(raw.title || nodes[raw.rootId].text || "Lembar"),
     nodes,
     structure,
+    table: raw.table ? normalizeTable(raw.table) : undefined,
     bg: { ...defaultBg(), ...(raw.bg || {}) },
     floats: Array.isArray(raw.floats) ? raw.floats : [],
     pitch,

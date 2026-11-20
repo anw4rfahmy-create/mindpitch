@@ -5,6 +5,7 @@ import { familyCss } from "./fonts";
 import { canvasPattern, patternDef } from "./patterns";
 import { fileDataUrl, loadImage } from "./files";
 import { Sheet } from "./types";
+import { drawTable, ensureTableFonts, tableSvg } from "./table";
 
 export type FrameId = "none" | "line" | "thick" | "double" | "round" | "dashed" | "corners" | "band" | "diamond";
 
@@ -194,6 +195,10 @@ const primsSvg = (prims: Prim[]) =>
 
 // ---------------------------------------------------------------- isi peta (koordinat tata letak)
 export async function drawContent(ctx: CanvasRenderingContext2D, sheet: Sheet, lay: LayoutResult) {
+  if (sheet.table) {
+    drawTable(ctx, sheet);
+    return;
+  }
   for (const f of sheet.floats) {
     const im = await loadImage(f.fileId);
     if (im) ctx.drawImage(im, f.x, f.y, f.w, f.h);
@@ -296,6 +301,7 @@ function fitTransform(lay: LayoutResult, box: { x: number; y: number; w: number;
 }
 
 export async function renderPage(sheet: Sheet, o: ExportOpts, size: { w: number; h: number }, title?: string): Promise<HTMLCanvasElement> {
+  await ensureTableFonts(sheet);
   const lay = computeLayout(sheet);
   const { w: W, h: H } = size;
   const cv = document.createElement("canvas");
@@ -342,6 +348,7 @@ export async function renderPage(sheet: Sheet, o: ExportOpts, size: { w: number;
 }
 
 export async function renderBlob(sheet: Sheet, o: ExportOpts, type: "image/png" | "image/jpeg", title?: string, longSide = 0): Promise<{ blob: Blob; w: number; h: number; ptW?: number; ptH?: number }> {
+  await ensureTableFonts(sheet);
   const lay = computeLayout(sheet);
   const size = pageSize(sheet, lay, o, longSide);
   const cv = await renderPage(sheet, o, size, title);
@@ -353,6 +360,7 @@ export async function renderBlob(sheet: Sheet, o: ExportOpts, type: "image/png" 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export async function renderSvg(sheet: Sheet, o: ExportOpts, title?: string): Promise<string> {
+  await ensureTableFonts(sheet);
   const lay = computeLayout(sheet);
   const size = pageSize(sheet, lay, o, 1600);
   const { w: W, h: H } = size;
@@ -374,6 +382,8 @@ export async function renderSvg(sheet: Sheet, o: ExportOpts, title?: string): Pr
   if (o.title && title)
     P.push(`<text x="${W / 2}" y="${box.inset + box.titleH / 2}" text-anchor="middle" dominant-baseline="central" font-family="${familyCss(sheet.font).replace(/"/g, "'")}" font-weight="700" font-size="${box.u * 3.2}" fill="#0f172a">${esc(title)}</text>`);
   P.push(`<g transform="translate(${t.tx},${t.ty}) scale(${t.k})">`);
+  if (sheet.table) P.push(tableSvg(sheet));
+  else {
   for (const f of sheet.floats) {
     const u = await fileDataUrl(f.fileId);
     if (u) P.push(`<image href="${u}" x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" preserveAspectRatio="none"/>`);
@@ -411,6 +421,7 @@ export async function renderSvg(sheet: Sheet, o: ExportOpts, title?: string): Pr
       )
     );
     P.push(`</g>`);
+  }
   }
   P.push(`</g></svg>`);
   return P.join("");

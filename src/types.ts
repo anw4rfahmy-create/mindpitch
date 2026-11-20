@@ -84,7 +84,34 @@ export interface PitchSettings {
   excluded: string[]; // id topik yang tidak ikut Pitch
 }
 
+export interface CellStyle {
+  bg?: string;
+  color?: string;
+  bold?: boolean;
+  align?: "l" | "c" | "r";
+  size?: number;
+}
+
+/** Lembar bertipe tabel (mis. tashrif). Sel diindeks [baris][kolom] secara logis; bila `rtl`, kolom 0 tampil di kanan. */
+export interface TableData {
+  rows: number;
+  cols: number;
+  cells: string[][];
+  style: Record<string, CellStyle>; // kunci "r,c"
+  colW: number[]; // 0 = otomatis
+  headRows: number;
+  headCols: number;
+  rtl: boolean;
+  font: string; // untuk teks Latin
+  arFont: string; // untuk teks Arab
+  fontSize: number;
+  headBg: string;
+  stripe: boolean;
+  border: string;
+}
+
 export interface Sheet {
+  table?: TableData;
   id: string;
   title: string;
   rootId: string;

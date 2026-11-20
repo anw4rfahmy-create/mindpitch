@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Canvas, { CanvasHandle } from "./Canvas";
 import Outline from "./Outline";
 import PitchPanel from "./PitchPanel";
+import TableEditor from "./TableEditor";
+import TablePresenter from "./TablePresenter";
+import { TABLE_TEMPLATES, TableTemplate } from "./table";
 import SheetBar from "./SheetBar";
 import FormatPanel from "./FormatPanel";
 import AttachmentViewer from "./AttachmentViewer";
@@ -22,6 +25,7 @@ import {
   updateNode,
   usedFileIds,
   addSummary,
+  newTableSheet,
 } from "./model";
 import ExportDialog from "./ExportDialog";
 import { deleteFilesExcept, prepareImage, putFile } from "./files";
@@ -48,6 +52,7 @@ export default function Editor({ initial, onBack }: Props) {
   const [showFormat, setShowFormat] = useState(false);
   const [panelTab, setPanelTab] = useState<"topic" | "map" | "keys" | "help">("map");
   const [showExport, setShowExport] = useState(false);
+  const [showNew, setShowNew] = useState(false);
   const [attachFor, setAttachFor] = useState<string | null>(null);
   const [focusToken, setFocusToken] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
@@ -272,7 +277,16 @@ export default function Editor({ initial, onBack }: Props) {
     setEditingId(null);
     setFitKey((k) => k + 1);
   };
-  const addSheet = () => {
+  const addSheet = () => setShowNew(true);
+  const addTableSheet = (tpl: TableTemplate) => {
+    const name = TABLE_TEMPLATES.find((x) => x.id === tpl)!.title;
+    const s = newTableSheet(tpl === "blank" ? `Tabel ${doc.sheets.length + 1}` : name, tpl);
+    apply((d) => ({ ...d, sheets: [...d.sheets, s], activeId: s.id }));
+    setSelectedId(null);
+    setShowNew(false);
+  };
+  const addMapSheet = () => {
+    setShowNew(false);
     const s = newSheet(`Lembar ${doc.sheets.length + 1}`, "Topik utama");
     s.font = sheet.font;
     s.theme = sheet.theme;
@@ -494,10 +508,10 @@ export default function Editor({ initial, onBack }: Props) {
         <button className="btn icon" disabled={!canRedo} onClick={redo} title="Ulangi (Ctrl+Y)">
           ↷
         </button>
-        <button className={"btn" + (showOutline ? " active" : "")} onClick={() => setShowOutline((v) => !v)}>
+        <button hidden={!!sheet.table} className={"btn" + (showOutline ? " active" : "")} onClick={() => setShowOutline((v) => !v)}>
           ☰ <span className="hide-sm">Outline</span>
         </button>
-        <button className={"btn" + (showFormat && panelTab !== "keys" && panelTab !== "help" ? " active" : "")} onClick={() => (showFormat && panelTab !== "keys" && panelTab !== "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab(sel ? "topic" : "map")))}>
+        <button hidden={!!sheet.table} className={"btn" + (showFormat && panelTab !== "keys" && panelTab !== "help" ? " active" : "")} onClick={() => (showFormat && panelTab !== "keys" && panelTab !== "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab(sel ? "topic" : "map")))}>
           🎨 <span className="hide-sm">Format</span>
         </button>
         <button className={"btn icon" + (showFormat && (panelTab === "keys" || panelTab === "help") ? " active" : "")} title="Pintasan keyboard &amp; panduan (?)" aria-label="Pintasan" onClick={() => (showFormat && (panelTab === "keys" || panelTab === "help") ? setShowFormat(false) : (setShowFormat(true), setPanelTab("keys")))}>
@@ -507,12 +521,12 @@ export default function Editor({ initial, onBack }: Props) {
           ⬇ <span className="hide-sm">Ekspor</span>
         </button>
         <button className="btn primary" onClick={() => setShowPitch(true)}>
-          🎬 Pitch
+          {sheet.table ? "▶ Tampil" : "🎬 Pitch"}
         </button>
       </header>
 
       <div className="workspace">
-        {showOutline && (
+        {showOutline && !sheet.table && (
           <aside className="side outline-side">
             <Outline
               sheet={sheet}
@@ -540,6 +554,12 @@ export default function Editor({ initial, onBack }: Props) {
         )}
 
         <div className="canvas-col">
+          {sheet.table ? (
+            <div className="canvas-area">
+              <TableEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, table: fn(sh.table!) }))} onPresent={() => setShowPitch(true)} />
+              {toast && <div className="toast">{toast}</div>}
+            </div>
+          ) : (
           <div className="canvas-area">
             <Canvas
               ref={canvas}
@@ -608,10 +628,12 @@ export default function Editor({ initial, onBack }: Props) {
             </div>
             {toast && <div className="toast">{toast}</div>}
           </div>
+          )}
           <SheetBar
             sheets={doc.sheets}
             activeId={doc.activeId}
-            topicCount={topicCount === totalTopics ? totalTopics : topicCount}
+            topicCount={sheet.table ? sheet.table.rows * sheet.table.cols : topicCount === totalTopics ? totalTopics : topicCount}
+            unit={sheet.table ? "sel" : "topik"}
             onSelect={selectSheet}
             onAdd={addSheet}
             onRename={renameSheet}
@@ -621,7 +643,7 @@ export default function Editor({ initial, onBack }: Props) {
           />
         </div>
 
-        {showFormat && (
+        {showFormat && (!sheet.table || panelTab === "keys" || panelTab === "help") && (
           <FormatPanel
             key={doc.activeId}
             sheet={sheet}
@@ -676,7 +698,21 @@ export default function Editor({ initial, onBack }: Props) {
       )}
 
       {showExport && <ExportDialog wb={doc} sheet={sheet} onClose={() => setShowExport(false)} onDone={say} />}
-      {showPitch && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onClose={() => setShowPitch(false)} />}
+      {showNew && (
+        <div className="modal-back" onClick={() => setShowNew(false)}>
+          <div className="modal" style={{ width: "min(520px,100%)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head"><b>Lembar baru</b><div className="spacer" /><button className="btn icon small" onClick={() => setShowNew(false)}>✕</button></div>
+            <div className="newsheet-list">
+              <button className="newsheet-item" onClick={addMapSheet}><b>🧠 Peta pikiran</b><span className="small muted">Topik bercabang seperti biasa</span></button>
+              {TABLE_TEMPLATES.map((x) => (
+                <button key={x.id} className="newsheet-item" onClick={() => addTableSheet(x.id)}><b>▦ {x.title}</b><span className="small muted">{x.sub}</span></button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {showPitch && sheet.table && <TablePresenter sheet={sheet} onClose={() => setShowPitch(false)} />}
+      {showPitch && !sheet.table && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onClose={() => setShowPitch(false)} />}
     </div>
   );
 }

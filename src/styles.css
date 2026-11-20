@@ -1223,3 +1223,31 @@ kbd {
 .keytable td { padding: 5px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .keytable td:first-child { white-space: nowrap; width: 1%; padding-right: 10px; }
 .keytable kbd { margin-right: 2px; }
+
+/* ---------- lembar tabel ---------- */
+.tbl-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg, #f6f8fc); }
+.tbl-bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.tbl-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tbl-label { font-size: 11px; font-weight: 700; color: var(--muted, #64748b); margin-right: 2px; }
+.tbl-bar select { max-width: 150px; padding: 3px 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.tbl-bar .swatch { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(0,0,0,.2); padding: 0; cursor: pointer; }
+.tbl-bar .swatch.on { outline: 2px solid #4f46e5; }
+.tbl-bar .swatch.txt { font-size: 11px; font-weight: 800; line-height: 16px; }
+.tbl-hint { padding: 4px 12px; }
+.tbl-scroll { flex: 1; overflow: auto; padding: 14px 14px 80px; }
+.tbl { border-collapse: collapse; margin: 0 auto; table-layout: auto; }
+.tbl td { border: 1.2px solid #94a3b8; padding: 0; vertical-align: middle; }
+.tbl th.tbl-h, .tbl th.tbl-corner { background: #eef1f7; border: 1px solid var(--line); font-size: 11px; color: #64748b; cursor: pointer; user-select: none; padding: 2px 4px; }
+.tbl th.tbl-h.on { background: #c7d2fe; color: #312e81; }
+.tcell { display: block; width: 100%; box-sizing: border-box; border: 0; outline: 0; resize: none; overflow: hidden; padding: 8px 12px; min-height: 40px; font-family: inherit; }
+.tcell.active { box-shadow: inset 0 0 0 2px #4f46e5; }
+.tbl-present { position: fixed; inset: 0; z-index: 90; background: #0b1020; display: flex; flex-direction: column; }
+.tbl-stage { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.tbl.present { transform-origin: center; margin: 0; background: #fff; }
+.tbl.present td { padding: 8px 12px; }
+.tbl-ctrl { display: flex; gap: 6px; align-items: center; justify-content: center; padding: 10px; flex-wrap: wrap; color: #cbd5e1; }
+.tbl-sep { width: 1px; height: 20px; background: #475569; margin: 0 4px; }
+.newsheet-list { display: grid; gap: 8px; padding: 12px; }
+.newsheet-item { text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer; }
+.newsheet-item:hover { border-color: #4f46e5; background: #f5f6ff; }
+.newsheet-item b { display: block; margin-bottom: 2px; }

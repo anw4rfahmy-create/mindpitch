@@ -88,12 +88,12 @@ export default function FormatPanel(p: Props) {
     <aside className="side inspector">
       <div className="insp-head">
         <div className="seg">
-          <button className={tab === "topic" ? "on" : ""} onClick={() => setTab("topic")}>
+          {!p.sheet.table && <button className={tab === "topic" ? "on" : ""} onClick={() => setTab("topic")}>
             Topik
-          </button>
-          <button className={tab === "map" ? "on" : ""} onClick={() => setTab("map")}>
+          </button>}
+          {!p.sheet.table && <button className={tab === "map" ? "on" : ""} onClick={() => setTab("map")}>
             Peta
-          </button>
+          </button>}
           <button className={tab === "keys" ? "on" : ""} onClick={() => setTab("keys")}>
             Pintasan
           </button>
@@ -186,6 +186,14 @@ export default function FormatPanel(p: Props) {
             <li><b>⊖ / ⊕ kecil di ujung topik</b> melipat atau membuka cabang itu</li>
             <li>Seret topik ke topik lain untuk memindahkan</li>
             <li>Tab Topik: warna, bentuk, <b>arsir</b>, font, ukuran, gambar, catatan</li>
+          </ul>
+          <h4>Lembar tabel (mis. tashrif)</h4>
+          <ul>
+            <li>Tombol <b>＋</b> di kiri bawah › pilih <b>Tabel</b>: kosong, <b>Tashrif istilahi</b>, atau <b>Tashrif lughawi</b> (contoh kata نَصَرَ, tinggal diganti)</li>
+            <li>Ketik langsung di sel; <b>tempel</b> tabel dari Word/Excel (Ctrl+V) mengisi banyak sel sekaligus</li>
+            <li>Klik nomor baris/kolom untuk memilihnya, lalu atur warna, huruf tebal, rata teks, atau sisipkan/hapus</li>
+            <li><b>⇠ Arab</b>: kolom pertama di kanan, font Arab &amp; Latin dipilih terpisah</li>
+            <li><b>▶ Tampilkan bertahap</b>: layar penuh, jawaban muncul per baris/kolom/sel</li>
           </ul>
           <h4>Peta &amp; lembar</h4>
           <ul>

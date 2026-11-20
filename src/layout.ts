@@ -2,6 +2,7 @@ import { fontString, isRtl } from "./fonts";
 import { textWidth, wrapCached } from "./measure";
 import { effectiveShape, lineStyleFor } from "./nodeStyle";
 import { NodeShape, Sheet } from "./types";
+import { tableGeom } from "./table";
 
 export type Side = "c" | "r" | "l" | "d" | "u";
 
@@ -139,6 +140,10 @@ function measure(sheet: Sheet, id: string, depth: number): Omit<LNode, "x" | "y"
 
 // ---------------------------------------------------------------- tata letak
 export function computeLayout(sheet: Sheet): LayoutResult {
+  if (sheet.table) {
+    const g = tableGeom(sheet);
+    return { nodes: {}, order: [], edges: [], bounds: { x: -2, y: -2, w: g.w + 4, h: g.h + 4 } };
+  }
   const N = sheet.nodes;
   const rootId = sheet.rootId;
   const out: Record<string, LNode> = {};

@@ -50,7 +50,7 @@ function topicJson(sheet: Sheet, id: string, root = false): any {
 }
 
 export function toXmind(wb: Workbook): Blob {
-  const content = wb.sheets.map((s) => ({
+  const content = (wb.sheets.some((s) => !s.table) ? wb.sheets.filter((s) => !s.table) : wb.sheets).map((s) => ({
     id: s.id,
     class: "sheet",
     title: s.title,

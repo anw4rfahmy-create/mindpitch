@@ -5,6 +5,7 @@ interface Props {
   sheets: Sheet[];
   activeId: string;
   topicCount: number;
+  unit?: string;
   onSelect(id: string): void;
   onAdd(): void;
   onRename(id: string, title: string): void;
@@ -89,7 +90,7 @@ export default function SheetBar(p: Props) {
         ))}
       </div>
       <div className="spacer" />
-      <span className="sheet-status small muted">{p.topicCount} topik</span>
+      <span className="sheet-status small muted">{p.topicCount} {p.unit ?? "topik"}</span>
       {menu && (
         <div className="menu sheet-menu" style={{ left: menu.x, bottom: window.innerHeight - menu.y + 4 }} onPointerDown={(e) => e.stopPropagation()}>
           <button
