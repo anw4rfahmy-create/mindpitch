@@ -1,6 +1,6 @@
 import { branchIndex } from "./model";
 import { paletteById } from "./themes";
-import { MNode, NodeShape, Sheet, StructureId } from "./types";
+import { MNode, NodeShape, PatternId, Sheet, StructureId } from "./types";
 
 export interface NodeStyle {
   fill: string; // "none" bila tanpa isi
@@ -9,6 +9,8 @@ export interface NodeStyle {
   text: string;
   shape: NodeShape;
   branch: string;
+  pattern?: Exclude<PatternId, "none">;
+  patternColor: string;
 }
 
 export function contrastText(hex: string): string {
@@ -46,9 +48,28 @@ function plainText(sheet: Sheet): string {
   return contrastText(sheet.bg.color);
 }
 
+export function patternOf(sheet: Sheet, n: MNode, depth: number): Exclude<PatternId, "none"> | undefined {
+  const p = n.pattern ?? (depth > 0 ? sheet.pattern : undefined);
+  return !p || p === "none" ? undefined : p;
+}
+
+/** Bentuk akhir topik: topik berarsir tidak boleh polos/garis agar arsirnya terlihat. */
+export function effectiveShape(sheet: Sheet, n: MNode, depth: number): NodeShape {
+  const s: NodeShape = n.shape ?? defaultShape(sheet, depth);
+  return (s === "line" || s === "none") && patternOf(sheet, n, depth) ? "rounded" : s;
+}
+
+export function hexA(hex: string, a: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return `rgba(0,0,0,${a})`;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
 export function styleFor(sheet: Sheet, n: MNode, depth: number): NodeStyle {
   const branch = branchColorOf(sheet, n.id);
-  const shape: NodeShape = n.shape ?? defaultShape(sheet, depth);
+  const shape: NodeShape = effectiveShape(sheet, n, depth);
+  const pattern = patternOf(sheet, n, depth);
   const ts = sheet.topicStyle;
   let fill: string, stroke: string, text: string, strokeWidth = 1.6;
 
@@ -81,8 +102,18 @@ export function styleFor(sheet: Sheet, n: MNode, depth: number): NodeStyle {
     stroke = "none";
     text = plainText(sheet);
   }
+  let patternColor = "rgba(0,0,0,0.2)";
+  if (pattern) {
+    if (fill === "none") {
+      fill = "#ffffff";
+      if (stroke === "none") stroke = branch;
+      text = contrastText(fill);
+    }
+    const dark = contrastText(fill) === "#ffffff";
+    patternColor = dark ? "rgba(255,255,255,0.42)" : stroke === fill || stroke === "none" ? "rgba(0,0,0,0.22)" : hexA(stroke, 0.5);
+  }
   if (n.textColor) text = n.textColor;
-  return { fill, stroke, strokeWidth, text, shape, branch };
+  return { fill, stroke, strokeWidth, text, shape, branch, pattern, patternColor };
 }
 
 export function radiusFor(shape: NodeShape, h: number): number {

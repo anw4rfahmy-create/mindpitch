@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { importFile as importAny, sheetToPngBlob } from "./exporters";
+import { importFile as importAny } from "./exporters";
+import { defaultExportOpts, renderBlob } from "./exportRender";
 import { ensureFonts } from "./fonts";
 import { activeSheet, newWorkbook, sampleWorkbook } from "./model";
 import { deleteDoc, duplicateDoc, listDocs, saveDoc } from "./storage";
@@ -20,7 +21,7 @@ function Preview({ doc }: { doc: Workbook }) {
     let dead = false;
     const sh = activeSheet(doc);
     ensureFonts([sh.font])
-      .then(() => sheetToPngBlob(sh, 0.6))
+      .then(() => renderBlob(sh, { ...defaultExportOpts(), quality: 1 }, "image/png", undefined, 700).then((r) => r.blob))
       .then((b) => {
         if (dead) return;
         url = URL.createObjectURL(b);
@@ -112,7 +113,7 @@ export default function Home({ onOpen }: Props) {
         <input
           ref={fileRef}
           type="file"
-          accept=".mindpitch,.zip,.json,.md,.markdown,.txt"
+          accept=".mindpitch,.xmind,.zip,.json,.md,.markdown,.txt"
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];

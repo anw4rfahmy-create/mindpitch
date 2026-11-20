@@ -1,9 +1,9 @@
-import { useState } from "react";
 import { FONTS } from "./fonts";
 import { NODE_COLORS } from "./nodeStyle";
 import { MAP_PALETTES } from "./themes";
 import { reorder, outdent, indent, foldToLevel, maxDepth } from "./model";
-import { ImgSize, LineStyle, MNode, NodeShape, Sheet, StructureId, TopicStyle } from "./types";
+import { PATTERNS } from "./patterns";
+import { ImgSize, PatternId, LineStyle, MNode, NodeShape, Sheet, StructureId, TopicStyle } from "./types";
 
 export const STRUCTURES: { id: StructureId; label: string; icon: string }[] = [
   { id: "mind-both", label: "Peta pikiran", icon: "◐" },
@@ -37,6 +37,9 @@ const TSTYLE: [TopicStyle, string][] = [["auto", "Otomatis"], ["box", "Kotak"], 
 interface Props {
   sheet: Sheet;
   sel: MNode | null;
+  count: number;
+  tab: "topic" | "map" | "help";
+  onTab(t: "topic" | "map" | "help"): void;
   selFloat: string | null;
   onSheet(fn: (s: Sheet) => Sheet): void;
   onNodes(fn: (n: Sheet["nodes"]) => Sheet["nodes"]): void;
@@ -63,7 +66,7 @@ const Seg = <T,>({ items, value, onPick }: { items: [T, string][]; value: T; onP
 
 export default function FormatPanel(p: Props) {
   const { sheet, sel } = p;
-  const [tab, setTab] = useState<"topic" | "map">(sel ? "topic" : "map");
+  const { tab, onTab: setTab } = p;
   const depthMax = maxDepth(sheet.nodes, sheet.rootId);
 
   const FontSelect = ({ value, onChange, withAuto }: { value?: string; onChange(v: string | undefined): void; withAuto?: boolean }) => (
@@ -91,6 +94,9 @@ export default function FormatPanel(p: Props) {
           <button className={tab === "map" ? "on" : ""} onClick={() => setTab("map")}>
             Peta
           </button>
+          <button className={tab === "help" ? "on" : ""} onClick={() => setTab("help")}>
+            Panduan
+          </button>
         </div>
         <div className="spacer" />
         <button className="btn icon small" onClick={p.onClose}>
@@ -98,9 +104,58 @@ export default function FormatPanel(p: Props) {
         </button>
       </div>
 
+
+      {tab === "help" && (
+        <div className="guide">
+          <h4>Bilah atas</h4>
+          <ul>
+            <li><b>←</b> kembali ke beranda (otomatis tersimpan)</li>
+            <li><b>↶ ↷</b> urungkan / ulangi</li>
+            <li><b>☰ Outline</b> edit sebagai daftar berindentasi</li>
+            <li><b>🎨 Format</b> panel ini: Topik, Peta, Panduan</li>
+            <li><b>⬇ Ekspor</b> PDF, PNG, SVG (pilih ukuran &amp; bingkai), XMind, MindPitch, Markdown</li>
+            <li><b>🎬 Pitch</b> presentasi &amp; video bergaya XMind</li>
+          </ul>
+          <h4>Bilah bawah topik</h4>
+          <ul>
+            <li><b>＋ Anak / ＋ Saudara</b> tambah topik</li>
+            <li><b>✎ Ubah</b> ganti teks (atau klik dua kali)</li>
+            <li><b>⊖ Lipat / ⊕ Buka</b> sembunyikan/tampilkan cabang</li>
+            <li><b>📎</b> lampiran: gambar, PDF, PPT, dll. &nbsp; <b>🖼</b> gambar di dalam topik</li>
+            <li><b>☑</b> mode pilih banyak: ketuk beberapa topik, lalu ubah gayanya bersamaan</li>
+            <li><b>⫴ Saudara</b> pilih semua topik selevel dalam satu induk</li>
+            <li><b>🗑</b> hapus topik terpilih</li>
+          </ul>
+          <h4>Pada topik</h4>
+          <ul>
+            <li><b>⊖ / ⊕ kecil di ujung topik</b> melipat atau membuka cabang itu</li>
+            <li>Seret topik ke topik lain untuk memindahkan</li>
+            <li>Tab Topik: warna, bentuk, <b>arsir</b>, font, ukuran, gambar, catatan</li>
+          </ul>
+          <h4>Peta &amp; lembar</h4>
+          <ul>
+            <li>Tab <b>Peta</b>: struktur (14 jenis), font, tema warna, arsir semua topik, garis, lipat per level, latar &amp; gambar</li>
+            <li>Tab lembar di kiri bawah: <b>＋</b> tambah, klik dua kali ganti nama, <b>⋯</b> gandakan/geser/hapus</li>
+          </ul>
+          <h4>Layar sentuh (HP)</h4>
+          <ul>
+            <li>Geser satu jari = menggeser peta · cubit = zoom</li>
+            <li>Ketuk dua kali topik = ubah teks</li>
+            <li>Pilih banyak: aktifkan tombol <b>☑</b> lalu ketuk topik-topiknya</li>
+          </ul>
+          <h4>Pintasan keyboard</h4>
+          <ul>
+            <li><kbd>Tab</kbd> anak · <kbd>Enter</kbd> saudara · <kbd>F2</kbd> ubah · <kbd>Spasi</kbd> lipat/buka · <kbd>Del</kbd> hapus</li>
+            <li><kbd>Shift</kbd>/<kbd>Ctrl</kbd> + klik = pilih banyak</li>
+            <li><kbd>Alt</kbd>+<kbd>↑↓←→</kbd> urutan / indentasi · <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> · <kbd>Ctrl</kbd>+<kbd>0</kbd> pas layar</li>
+          </ul>
+        </div>
+      )}
+
       {tab === "topic" && !sel && <p className="muted small">Pilih sebuah topik untuk mengubah gayanya.</p>}
       {tab === "topic" && sel && (
         <>
+          {p.count > 1 && <div className="multi-banner">✔ {p.count} topik dipilih — perubahan berlaku untuk semuanya</div>}
           <div className="field">
             <span>Warna</span>
             <div className="swatches">
@@ -115,6 +170,19 @@ export default function FormatPanel(p: Props) {
           <div className="field">
             <span>Bentuk</span>
             <Seg items={SHAPES} value={sel.shape} onPick={(v) => p.onPatch({ shape: v })} />
+          </div>
+          <div className="field">
+            <span>Arsir (pola isi)</span>
+            <div className="pat-grid">
+              <button className={!sel.pattern ? "on" : ""} onClick={() => p.onPatch({ pattern: undefined })} title="Ikuti peta">
+                Ikuti
+              </button>
+              {PATTERNS.map((pt) => (
+                <button key={pt.id} className={sel.pattern === pt.id ? "on" : ""} onClick={() => p.onPatch({ pattern: pt.id as PatternId })}>
+                  {pt.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="field">
             <span>Font topik</span>
@@ -168,7 +236,7 @@ export default function FormatPanel(p: Props) {
               📎 {sel.attachments?.length ? `${sel.attachments.length} lampiran` : "Tambah lampiran"}
             </button>
           </div>
-          <div className="field">
+          {p.count === 1 && <div className="field">
             <span>Urutan</span>
             <div className="seg">
               <button onClick={() => p.onNodes((n) => reorder(n, sel.id, -1))}>↑</button>
@@ -176,11 +244,11 @@ export default function FormatPanel(p: Props) {
               <button onClick={() => p.onNodes((n) => outdent(n, sel.id))}>⇤</button>
               <button onClick={() => p.onNodes((n) => indent(n, sel.id))}>⇥</button>
             </div>
-          </div>
-          <label className="field">
+          </div>}
+          {p.count === 1 && <label className="field">
             <span>Catatan (jadi catatan pembicara)</span>
             <textarea className="note-input" rows={4} defaultValue={sel.note ?? ""} key={sel.id} onBlur={(e) => e.target.value !== (sel.note ?? "") && p.onPatch({ note: e.target.value || undefined })} />
-          </label>
+          </label>}
         </>
       )}
 
@@ -219,6 +287,17 @@ export default function FormatPanel(p: Props) {
           <div className="field">
             <span>Gaya topik</span>
             <Seg items={TSTYLE} value={sheet.topicStyle} onPick={(v) => p.onSheet((s) => ({ ...s, topicStyle: v }))} />
+          </div>
+          <div className="field">
+            <span>Arsir semua topik</span>
+            <div className="pat-grid">
+              {PATTERNS.map((pt) => (
+                <button key={pt.id} className={(sheet.pattern ?? "none") === pt.id ? "on" : ""} onClick={() => p.onSheet((s) => ({ ...s, pattern: pt.id === "none" ? undefined : pt.id }))}>
+                  {pt.label}
+                </button>
+              ))}
+            </div>
+            <small className="muted">Topik tertentu bisa diubah lewat tab Topik.</small>
           </div>
           <div className="field">
             <span>Gaya garis</span>

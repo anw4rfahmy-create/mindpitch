@@ -18,6 +18,7 @@ export type StructureId =
 
 export type LineStyle = "auto" | "curve" | "elbow" | "round" | "straight";
 export type TopicStyle = "auto" | "box" | "pill" | "line" | "none";
+export type PatternId = "none" | "diag" | "diag2" | "cross" | "dots" | "horiz" | "vert";
 export type ImgSize = "S" | "M" | "L";
 
 export interface Attachment {
@@ -47,6 +48,7 @@ export interface MNode {
   bold?: boolean;
   italic?: boolean;
   textColor?: string;
+  pattern?: PatternId;
   image?: NodeImage;
   attachments?: Attachment[];
 }
@@ -91,6 +93,7 @@ export interface Sheet {
   lineStyle: LineStyle;
   lineWidth: number; // 0 = otomatis
   topicStyle: TopicStyle;
+  pattern?: PatternId; // arsir bawaan semua topik
   font: string; // id font global
   bg: MapBg;
   floats: FloatImage[];

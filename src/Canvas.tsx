@@ -16,6 +16,7 @@ import { edgeWidth, radiusFor, styleFor } from "./nodeStyle";
 import { isDescendant } from "./model";
 import { filesVersion, subscribeFiles, urlOf } from "./files";
 import { isRtl } from "./fonts";
+import { patternDef, patternId } from "./patterns";
 
 interface View {
   x: number;
@@ -35,7 +36,9 @@ interface Props {
   selFloat: string | null;
   editingId: string | null;
   fitKey: number;
-  onSelect(id: string | null): void;
+  multiIds: string[];
+  multiMode: boolean;
+  onSelect(id: string | null, additive?: boolean): void;
   onSelectFloat(id: string | null): void;
   onStartEdit(id: string): void;
   onCommitEdit(id: string, text: string): void;
@@ -50,7 +53,7 @@ const MIN_K = 0.1;
 const MAX_K = 3;
 
 const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
-  const { sheet, layout, selectedId, editingId, fitKey, selFloat } = props;
+  const { sheet, layout, selectedId, editingId, fitKey, selFloat, multiIds, multiMode } = props;
   useSyncExternalStore(subscribeFiles, filesVersion);
   const wrap = useRef<HTMLDivElement>(null);
   const [view, setViewState] = useState<View>({ x: 0, y: 0, k: 1 });
@@ -88,9 +91,18 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     if (!wrap.current) return;
     const { w, h } = size();
     const b = layout.bounds;
-    const k = Math.max(MIN_K, Math.min(1.1, (w - 80) / Math.max(b.w, 1), (h - 130) / Math.max(b.h, 1)));
-    setView({ k, x: w / 2 - (b.x + b.w / 2) * k, y: (h - 40) / 2 - (b.y + b.h / 2) * k });
-  }, [layout, setView]);
+    const coarse = matchMedia("(pointer: coarse)").matches;
+    const fitK = Math.min(1.1, (w - 80) / Math.max(b.w, 1), (h - 130) / Math.max(b.h, 1));
+    // di HP jangan mengecil sampai tak terbaca: pakai zoom minimum dan pusatkan pada topik pusat
+    const minK = coarse ? 0.55 : MIN_K;
+    const k = Math.max(minK, fitK);
+    if (k > fitK) {
+      const r = layout.nodes[sheet.rootId];
+      const cx = r ? r.x + r.w / 2 : b.x + b.w / 2,
+        cy = r ? r.y + r.h / 2 : b.y + b.h / 2;
+      setView({ k, x: w / 2 - cx * k, y: (h - 40) / 2 - cy * k });
+    } else setView({ k, x: w / 2 - (b.x + b.w / 2) * k, y: (h - 40) / 2 - (b.y + b.h / 2) * k });
+  }, [layout, sheet.rootId, setView]);
 
   const zoomAt = useCallback(
     (factor: number, cx: number, cy: number) => {
@@ -231,8 +243,13 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     const nodeEl = el.closest("[data-nid]");
     if (nodeEl) {
       const id = nodeEl.getAttribute("data-nid")!;
-      props.onSelect(id);
+      const additive = e.shiftKey || e.ctrlKey || e.metaKey || multiMode;
+      props.onSelect(id, additive);
       props.onSelectFloat(null);
+      if (additive) {
+        pointers.current.delete(e.pointerId);
+        return;
+      }
       const isRoot = id === sheet.rootId;
       dragRef.current = isRoot ? null : { id, sx: e.clientX, sy: e.clientY, active: false };
       pan.current = isRoot ? { sx: e.clientX, sy: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y, moved: false } : null;
@@ -389,6 +406,12 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
             ) : (
               <rect width={ln.w} height={ln.h} rx={r} fill={st.fill} stroke={st.stroke} strokeWidth={st.strokeWidth} />
             )}
+            {st.pattern && st.shape !== "line" && st.shape !== "none" &&
+              (st.shape === "ellipse" ? (
+                <ellipse cx={ln.w / 2} cy={ln.h / 2} rx={ln.w / 2} ry={ln.h / 2} fill={`url(#${patternId(st.pattern, st.patternColor)})`} pointerEvents="none" />
+              ) : (
+                <rect width={ln.w} height={ln.h} rx={r} fill={`url(#${patternId(st.pattern, st.patternColor)})`} pointerEvents="none" />
+              ))}
             {ln.img && imgUrl && (
               <image href={imgUrl} x={ln.img.x} y={ln.img.y} width={ln.img.w} height={ln.img.h} preserveAspectRatio="xMidYMid slice" pointerEvents="none" />
             )}
@@ -422,6 +445,9 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
                 )}
               </g>
             )}
+            {id !== selectedId && multiIds.includes(id) && (
+              <rect x={-4} y={-4} width={ln.w + 8} height={ln.h + 8} rx={(st.shape === "ellipse" ? ln.h / 2 : r) + 4} fill="rgba(79,70,229,.08)" stroke="#4f46e5" strokeWidth={2} strokeDasharray="5 3" pointerEvents="none" />
+            )}
             {id === selectedId && (
               <rect
                 x={-4}
@@ -439,10 +465,26 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         );
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout, sheet, selectedId, editingId, filesVersion()]
+    [layout, sheet, selectedId, editingId, multiIds, filesVersion()]
   );
 
-  const badgeScale = Math.min(2.2, Math.max(0.8, 1 / view.k));
+  const patternDefs = useMemo(() => {
+    const seen = new Set<string>();
+    let out = "";
+    for (const id of layout.order) {
+      const st = styleFor(sheet, sheet.nodes[id], layout.nodes[id].depth);
+      if (!st.pattern) continue;
+      const k = patternId(st.pattern, st.patternColor);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out += patternDef(st.pattern, st.patternColor);
+    }
+    return out;
+  }, [layout, sheet]);
+
+  // ukuran tetap di layar (px) agar mudah disentuh di HP, berapa pun zoom-nya
+  const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
+  const badgeScale = Math.min(coarse ? 2.4 : 2.2, Math.max(0.75, (coarse ? 1.1 : 1) / view.k));
   const badges = layout.order.map((id) => {
     const ln = layout.nodes[id];
     if (!ln.badge || !ln.hasKids) return null;
@@ -456,7 +498,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         transform={`translate(${ln.badge.x},${ln.badge.y}) scale(${badgeScale})`}
         style={{ cursor: "pointer" }}
       >
-        <circle r={13} fill="transparent" />
+        <circle r={coarse ? 22 : 14} fill="transparent" />
         <circle r={9.5} fill="#fff" stroke={color} strokeWidth={2} />
         <path d={collapsed ? "M-4.5,0 H4.5 M0,-4.5 V4.5" : "M-4.5,0 H4.5"} stroke={color} strokeWidth={2.2} strokeLinecap="round" />
       </g>
@@ -527,6 +569,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
       onPointerCancel={onPointerUp}
     >
       <svg width="100%" height="100%" style={{ display: "block" }}>
+        <defs dangerouslySetInnerHTML={{ __html: patternDefs }} />
         <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
           {floats}
           {edges}

@@ -22,7 +22,7 @@ import {
   updateNode,
   usedFileIds,
 } from "./model";
-import { download, safeName, sheetToMarkdown, sheetToPngBlob, sheetToSvg, toMindpitch } from "./exporters";
+import ExportDialog from "./ExportDialog";
 import { deleteFilesExcept, prepareImage, putFile } from "./files";
 import { ensureFonts } from "./fonts";
 import { Attachment, MNode, Sheet, StructureId, Workbook } from "./types";
@@ -37,12 +37,15 @@ export default function Editor({ initial, onBack }: Props) {
   const { doc, apply, applySheet, undo, redo, canUndo, canRedo, saved } = useDoc(initial);
   const sheet = activeSheet(doc);
   const [selectedId, setSelectedId] = useState<string | null>(sheet.rootId);
+  const [multi, setMulti] = useState<string[]>([]);
+  const [multiMode, setMultiMode] = useState(false);
   const [selFloat, setSelFloat] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fitKey, setFitKey] = useState(0);
   const [showPitch, setShowPitch] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
   const [showFormat, setShowFormat] = useState(false);
+  const [panelTab, setPanelTab] = useState<"topic" | "map" | "help">("map");
   const [showExport, setShowExport] = useState(false);
   const [attachFor, setAttachFor] = useState<string | null>(null);
   const [focusToken, setFocusToken] = useState(0);
@@ -117,6 +120,15 @@ export default function Editor({ initial, onBack }: Props) {
     [sheet.nodes, applySheet, addChildOf]
   );
 
+  const deleteMany = (ids: string[]) => {
+    const ok = ids.filter((i) => sheet.nodes[i]?.parentId);
+    if (!ok.length) return;
+    if (ok.length > 1 && !window.confirm(`Hapus ${ok.length} topik terpilih beserta turunannya?`)) return;
+    setNodes((nodes) => ok.reduce((acc, i) => removeNode(acc, i), nodes));
+    setSelectedId(sheet.nodes[ok[0]].parentId);
+    setMulti([]);
+  };
+
   const deleteNode = useCallback(
     (id: string) => {
       const n = sheet.nodes[id];
@@ -159,8 +171,32 @@ export default function Editor({ initial, onBack }: Props) {
     [sheet.nodes, setNodes]
   );
 
+  const targets = multi.length > 1 ? multi.filter((id) => sheet.nodes[id]) : sel ? [sel.id] : [];
   const patchSel = (patch: Partial<MNode>) => {
-    if (sel) setNodes((n) => updateNode(n, sel.id, patch));
+    if (!targets.length) return;
+    setNodes((n) => targets.reduce((acc, id) => updateNode(acc, id, patch), n));
+  };
+
+  const selectNode = (id: string | null, additive?: boolean) => {
+    if (!id) {
+      setSelectedId(null);
+      setMulti([]);
+      return;
+    }
+    if (additive) {
+      const cur = multi.length ? multi : selectedId ? [selectedId] : [];
+      const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+      setMulti(next);
+      setSelectedId(next.includes(id) ? id : next[next.length - 1] ?? null);
+    } else {
+      setSelectedId(id);
+      setMulti([]);
+    }
+  };
+  const selectSiblings = () => {
+    if (!sel || !sel.parentId) return;
+    const sibs = sheet.nodes[sel.parentId].children.filter((c) => sheet.nodes[c]);
+    setMulti(sibs);
   };
 
   const setStructure = (st: StructureId) => {
@@ -371,7 +407,7 @@ export default function Editor({ initial, onBack }: Props) {
         case "Delete":
         case "Backspace":
           e.preventDefault();
-          deleteNode(selectedId);
+          multi.length > 1 ? deleteMany(multi) : deleteNode(selectedId);
           break;
         case " ":
           e.preventDefault();
@@ -386,6 +422,8 @@ export default function Editor({ initial, onBack }: Props) {
           break;
         case "Escape":
           setSelectedId(null);
+          setMulti([]);
+          setMultiMode(false);
           setSelFloat(null);
           setShowExport(false);
           break;
@@ -393,22 +431,7 @@ export default function Editor({ initial, onBack }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showPitch, editingId, attachFor, selectedId, selFloat, applySheet, setNodes, undo, redo, addChildOf, addSiblingOf, deleteNode, toggleCollapse, navigate]);
-
-  // ---------- ekspor ----------
-  const doExport = async (kind: "png" | "svg" | "md" | "mindpitch") => {
-    setShowExport(false);
-    const name = safeName(doc.title + (kind === "mindpitch" ? "" : "-" + sheet.title));
-    try {
-      if (kind === "mindpitch") download(await toMindpitch(doc), `${safeName(doc.title)}.mindpitch`);
-      else if (kind === "md") download(new Blob([sheetToMarkdown(sheet)], { type: "text/markdown" }), `${name}.md`);
-      else if (kind === "svg") download(new Blob([await sheetToSvg(sheet)], { type: "image/svg+xml" }), `${name}.svg`);
-      else download(await sheetToPngBlob(sheet, 2), `${name}.png`);
-      say("Berhasil diekspor");
-    } catch {
-      say("Gagal mengekspor");
-    }
-  };
+  }, [showPitch, editingId, attachFor, selectedId, selFloat, multi, applySheet, setNodes, undo, redo, addChildOf, addSiblingOf, deleteNode, toggleCollapse, navigate]);
 
   const [title, setTitle] = useState(doc.title);
   useEffect(() => setTitle(doc.title), [doc.title]);
@@ -446,22 +469,15 @@ export default function Editor({ initial, onBack }: Props) {
         <button className={"btn" + (showOutline ? " active" : "")} onClick={() => setShowOutline((v) => !v)}>
           ☰ <span className="hide-sm">Outline</span>
         </button>
-        <button className={"btn" + (showFormat ? " active" : "")} onClick={() => setShowFormat((v) => !v)}>
+        <button className={"btn" + (showFormat && panelTab !== "help" ? " active" : "")} onClick={() => (showFormat && panelTab !== "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab(sel ? "topic" : "map")))}>
           🎨 <span className="hide-sm">Format</span>
         </button>
-        <div className="menu-wrap">
-          <button className="btn" onClick={() => setShowExport((v) => !v)}>
-            ⬇ <span className="hide-sm">Ekspor</span>
-          </button>
-          {showExport && (
-            <div className="menu" onMouseLeave={() => setShowExport(false)}>
-              <button onClick={() => doExport("mindpitch")}>Berkas MindPitch (semua lembar + lampiran)</button>
-              <button onClick={() => doExport("png")}>Gambar PNG (lembar ini)</button>
-              <button onClick={() => doExport("svg")}>Gambar SVG (lembar ini)</button>
-              <button onClick={() => doExport("md")}>Markdown (lembar ini)</button>
-            </div>
-          )}
-        </div>
+        <button className={"btn icon" + (showFormat && panelTab === "help" ? " active" : "")} title="Panduan tombol" aria-label="Panduan" onClick={() => (showFormat && panelTab === "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab("help")))}>
+          ?
+        </button>
+        <button className="btn" onClick={() => setShowExport(true)}>
+          ⬇ <span className="hide-sm">Ekspor</span>
+        </button>
         <button className="btn primary" onClick={() => setShowPitch(true)}>
           🎬 Pitch
         </button>
@@ -505,7 +521,9 @@ export default function Editor({ initial, onBack }: Props) {
               selFloat={selFloat}
               editingId={editingId}
               fitKey={fitKey}
-              onSelect={setSelectedId}
+              onSelect={selectNode}
+              multiIds={multi}
+              multiMode={multiMode}
               onSelectFloat={setSelFloat}
               onStartEdit={setEditingId}
               onCommitEdit={commitEdit}
@@ -547,7 +565,13 @@ export default function Editor({ initial, onBack }: Props) {
               <button className="btn" disabled={!sel} onClick={() => imgInput.current?.click()} title="Gambar pada topik">
                 🖼
               </button>
-              <button className="btn danger" disabled={!sel || !sel.parentId} onClick={() => sel && deleteNode(sel.id)}>
+              <button className={"btn" + (multiMode || multi.length > 1 ? " active" : "")} onClick={() => setMultiMode((v) => !v)} title="Pilih banyak topik (atau tahan Shift/Ctrl lalu klik)">
+                ☑{multi.length > 1 ? ` ${multi.length}` : ""}
+              </button>
+              <button className="btn" disabled={!sel || !sel.parentId} onClick={selectSiblings} title="Pilih semua saudara">
+                ⫴ Saudara
+              </button>
+              <button className="btn danger" disabled={!sel || !sel.parentId} onClick={() => (multi.length > 1 ? deleteMany(multi) : sel && deleteNode(sel.id))}>
                 🗑
               </button>
             </div>
@@ -571,6 +595,9 @@ export default function Editor({ initial, onBack }: Props) {
             key={doc.activeId}
             sheet={sheet}
             sel={sel}
+            count={Math.max(1, targets.length)}
+            tab={panelTab}
+            onTab={setPanelTab}
             selFloat={selFloat}
             onSheet={(fn) => applySheet(fn)}
             onNodes={(fn) => setNodes(fn)}
@@ -617,6 +644,7 @@ export default function Editor({ initial, onBack }: Props) {
         />
       )}
 
+      {showExport && <ExportDialog wb={doc} sheet={sheet} onClose={() => setShowExport(false)} onDone={say} />}
       {showPitch && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onClose={() => setShowPitch(false)} />}
     </div>
   );

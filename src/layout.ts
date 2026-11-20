@@ -1,6 +1,6 @@
 import { fontString, isRtl } from "./fonts";
 import { textWidth, wrapCached } from "./measure";
-import { defaultShape, lineStyleFor } from "./nodeStyle";
+import { effectiveShape, lineStyleFor } from "./nodeStyle";
 import { NodeShape, Sheet } from "./types";
 
 export type Side = "c" | "r" | "l" | "d" | "u";
@@ -97,7 +97,7 @@ function measure(sheet: Sheet, id: string, depth: number): Omit<LNode, "x" | "y"
   const size = n.fontSize ?? (depth === 0 ? 20 : depth === 1 ? 16 : 14);
   const bold = n.bold ?? depth <= 1;
   const font = fontString(n.font ?? sheet.font, bold ? 700 : 400, size, !!n.italic);
-  const shape = n.shape ?? defaultShape(sheet, depth);
+  const shape = effectiveShape(sheet, n, depth);
   const rtl = isRtl(n.text);
   const flat = shape === "line" || shape === "none";
   const ell = shape === "ellipse";
