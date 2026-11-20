@@ -21,6 +21,7 @@ import {
   uid,
   updateNode,
   usedFileIds,
+  addSummary,
 } from "./model";
 import ExportDialog from "./ExportDialog";
 import { deleteFilesExcept, prepareImage, putFile } from "./files";
@@ -45,7 +46,7 @@ export default function Editor({ initial, onBack }: Props) {
   const [showPitch, setShowPitch] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
   const [showFormat, setShowFormat] = useState(false);
-  const [panelTab, setPanelTab] = useState<"topic" | "map" | "help">("map");
+  const [panelTab, setPanelTab] = useState<"topic" | "map" | "keys" | "help">("map");
   const [showExport, setShowExport] = useState(false);
   const [attachFor, setAttachFor] = useState<string | null>(null);
   const [focusToken, setFocusToken] = useState(0);
@@ -101,6 +102,7 @@ export default function Editor({ initial, onBack }: Props) {
   // ---------- aksi topik ----------
   const addChildOf = useCallback(
     (id: string, edit = true) => {
+      if (sheet.nodes[id]?.summary) return;
       const r = addChild(sheet.nodes, id);
       applySheet((s) => ({ ...s, nodes: r.nodes }));
       setSelectedId(r.id);
@@ -121,7 +123,7 @@ export default function Editor({ initial, onBack }: Props) {
   );
 
   const deleteMany = (ids: string[]) => {
-    const ok = ids.filter((i) => sheet.nodes[i]?.parentId);
+    const ok = ids.filter((i) => sheet.nodes[i]?.parentId || sheet.nodes[i]?.summary);
     if (!ok.length) return;
     if (ok.length > 1 && !window.confirm(`Hapus ${ok.length} topik terpilih beserta turunannya?`)) return;
     setNodes((nodes) => ok.reduce((acc, i) => removeNode(acc, i), nodes));
@@ -132,6 +134,11 @@ export default function Editor({ initial, onBack }: Props) {
   const deleteNode = useCallback(
     (id: string) => {
       const n = sheet.nodes[id];
+      if (n?.summary) {
+        setNodes((nodes) => removeNode(nodes, id));
+        setSelectedId(null);
+        return;
+      }
       if (!n || !n.parentId) return say("Topik pusat tidak bisa dihapus");
       const count = collectSubtree(sheet.nodes, id).length;
       if (count > 3 && !window.confirm(`Hapus topik ini beserta ${count - 1} turunannya?`)) return;
@@ -193,6 +200,16 @@ export default function Editor({ initial, onBack }: Props) {
       setMulti([]);
     }
   };
+  const makeSummary = () => {
+    const ids = multi.length > 1 ? multi : selectedId ? [selectedId] : [];
+    const r = addSummary(sheet.nodes, ids);
+    if (!r) return say("Pilih topik (satu induk yang sama) untuk diringkas");
+    applySheet((s) => ({ ...s, nodes: r.nodes }));
+    setMulti([]);
+    setSelectedId(r.id);
+    setEditingId(r.id);
+  };
+
   const selectSiblings = () => {
     if (!sel || !sel.parentId) return;
     const sibs = sheet.nodes[sel.parentId].children.filter((c) => sheet.nodes[c]);
@@ -370,7 +387,18 @@ export default function Editor({ initial, onBack }: Props) {
         canvas.current?.zoomBy(1 / 1.2);
         return;
       }
+      if (mod && k === "]") {
+        e.preventDefault();
+        makeSummary();
+        return;
+      }
       if (mod) return;
+      if (k === "?" || (k === "/" && e.shiftKey)) {
+        e.preventDefault();
+        setShowFormat(true);
+        setPanelTab("keys");
+        return;
+      }
       if (selFloat && (k === "Delete" || k === "Backspace")) {
         e.preventDefault();
         applySheet((s) => ({ ...s, floats: s.floats.filter((f) => f.id !== selFloat) }));
@@ -431,7 +459,7 @@ export default function Editor({ initial, onBack }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showPitch, editingId, attachFor, selectedId, selFloat, multi, applySheet, setNodes, undo, redo, addChildOf, addSiblingOf, deleteNode, toggleCollapse, navigate]);
+  }, [showPitch, editingId, attachFor, selectedId, selFloat, multi, makeSummary, applySheet, setNodes, undo, redo, addChildOf, addSiblingOf, deleteNode, toggleCollapse, navigate]);
 
   const [title, setTitle] = useState(doc.title);
   useEffect(() => setTitle(doc.title), [doc.title]);
@@ -469,10 +497,10 @@ export default function Editor({ initial, onBack }: Props) {
         <button className={"btn" + (showOutline ? " active" : "")} onClick={() => setShowOutline((v) => !v)}>
           ☰ <span className="hide-sm">Outline</span>
         </button>
-        <button className={"btn" + (showFormat && panelTab !== "help" ? " active" : "")} onClick={() => (showFormat && panelTab !== "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab(sel ? "topic" : "map")))}>
+        <button className={"btn" + (showFormat && panelTab !== "keys" && panelTab !== "help" ? " active" : "")} onClick={() => (showFormat && panelTab !== "keys" && panelTab !== "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab(sel ? "topic" : "map")))}>
           🎨 <span className="hide-sm">Format</span>
         </button>
-        <button className={"btn icon" + (showFormat && panelTab === "help" ? " active" : "")} title="Panduan tombol" aria-label="Panduan" onClick={() => (showFormat && panelTab === "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab("help")))}>
+        <button className={"btn icon" + (showFormat && (panelTab === "keys" || panelTab === "help") ? " active" : "")} title="Pintasan keyboard &amp; panduan (?)" aria-label="Pintasan" onClick={() => (showFormat && (panelTab === "keys" || panelTab === "help") ? setShowFormat(false) : (setShowFormat(true), setPanelTab("keys")))}>
           ?
         </button>
         <button className="btn" onClick={() => setShowExport(true)}>
@@ -547,10 +575,10 @@ export default function Editor({ initial, onBack }: Props) {
             </div>
 
             <div className="actionbar">
-              <button className="btn" disabled={!sel} onClick={() => sel && addChildOf(sel.id)}>
+              <button className="btn" disabled={!sel || !!sel.summary} onClick={() => sel && addChildOf(sel.id)}>
                 ＋ Anak
               </button>
-              <button className="btn" disabled={!sel || !sel.parentId} onClick={() => sel && addSiblingOf(sel.id)}>
+              <button className="btn" disabled={!sel || !sel.parentId || !!sel.summary} onClick={() => sel && addSiblingOf(sel.id)}>
                 ＋ Saudara
               </button>
               <button className="btn" disabled={!sel} onClick={() => sel && setEditingId(sel.id)}>
@@ -568,10 +596,13 @@ export default function Editor({ initial, onBack }: Props) {
               <button className={"btn" + (multiMode || multi.length > 1 ? " active" : "")} onClick={() => setMultiMode((v) => !v)} title="Pilih banyak topik (atau tahan Shift/Ctrl lalu klik)">
                 ☑{multi.length > 1 ? ` ${multi.length}` : ""}
               </button>
+              <button className="btn" disabled={!sel || !sel.parentId} onClick={makeSummary} title="Ringkasan: kurung yang merangkum topik terpilih (pilih beberapa saudara dengan ☑)">
+                ⎬ Ringkasan
+              </button>
               <button className="btn" disabled={!sel || !sel.parentId} onClick={selectSiblings} title="Pilih semua saudara">
                 ⫴ Saudara
               </button>
-              <button className="btn danger" disabled={!sel || !sel.parentId} onClick={() => (multi.length > 1 ? deleteMany(multi) : sel && deleteNode(sel.id))}>
+              <button className="btn danger" disabled={!sel || (!sel.parentId && !sel.summary)} onClick={() => (multi.length > 1 ? deleteMany(multi) : sel && deleteNode(sel.id))}>
                 🗑
               </button>
             </div>

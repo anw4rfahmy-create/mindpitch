@@ -250,7 +250,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         pointers.current.delete(e.pointerId);
         return;
       }
-      const isRoot = id === sheet.rootId;
+      const isRoot = id === sheet.rootId || !!sheet.nodes[id]?.summary;
       dragRef.current = isRoot ? null : { id, sx: e.clientX, sy: e.clientY, active: false };
       pan.current = isRoot ? { sx: e.clientX, sy: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y, moved: false } : null;
       lastTapCandidate.current = id;

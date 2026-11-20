@@ -25,6 +25,8 @@ export function contrastText(hex: string): string {
 
 export function branchColorOf(sheet: Sheet, id: string): string {
   if (id === sheet.rootId) return "#334155";
+  const sm = sheet.nodes[id]?.summary;
+  if (sm && sheet.nodes[sm.from]) id = sm.from;
   const pal = paletteById(sheet.theme).colors;
   if (!sheet.colored) return pal[0];
   return pal[branchIndex(sheet.nodes, sheet.rootId, id) % pal.length];
@@ -55,7 +57,7 @@ export function patternOf(sheet: Sheet, n: MNode, depth: number): Exclude<Patter
 
 /** Bentuk akhir topik: topik berarsir tidak boleh polos/garis agar arsirnya terlihat. */
 export function effectiveShape(sheet: Sheet, n: MNode, depth: number): NodeShape {
-  const s: NodeShape = n.shape ?? defaultShape(sheet, depth);
+  const s: NodeShape = n.shape ?? (n.summary ? "rounded" : defaultShape(sheet, depth));
   return (s === "line" || s === "none") && patternOf(sheet, n, depth) ? "rounded" : s;
 }
 

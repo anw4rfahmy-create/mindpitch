@@ -49,6 +49,8 @@ export interface MNode {
   italic?: boolean;
   textColor?: string;
   pattern?: PatternId;
+  /** Bila ada: topik ini adalah Ringkasan (kurung) yang merangkum saudara dari `from` sampai `to`. */
+  summary?: { from: string; to: string };
   image?: NodeImage;
   attachments?: Attachment[];
 }

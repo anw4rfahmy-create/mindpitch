@@ -230,6 +230,7 @@ function finish(ctx: Ctx): LayoutResult {
     else if (n.side === "d") n.badge = { x: n.x + n.w / 2, y: n.y + n.h + 13 };
     else if (n.side === "u") n.badge = { x: n.x + n.w / 2, y: n.y - 13 };
   }
+  addSummaries(ctx);
   const order: string[] = [];
   const q = [rootId];
   while (q.length) {
@@ -248,8 +249,80 @@ function finish(ctx: Ctx): LayoutResult {
     x1 = Math.max(x1, n.x + n.w + (n.badge && n.side === "r" ? 24 : 0));
     y1 = Math.max(y1, n.y + n.h);
   }
+  for (const sid in out) if (sheet.nodes[sid]?.summary) order.push(sid);
   if (!isFinite(x0)) return { nodes: out, order, edges: ctx.edges, bounds: { x: 0, y: 0, w: 1, h: 1 } };
   return { nodes: out, order, edges: ctx.edges, bounds: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } };
+}
+
+// ---------------------------------------------------------------- ringkasan (summary)
+const swapXY = (d: string) => d.replace(/(-?[\d.]+),(-?[\d.]+)/g, "$2,$1");
+
+function addSummaries(ctx: Ctx) {
+  const { out, sheet } = ctx;
+  const N = sheet.nodes;
+  const descend = (id: string, acc: string[]) => {
+    acc.push(id);
+    ctx.kids(id).forEach((c) => descend(c, acc));
+  };
+  for (const sid in N) {
+    const s = N[sid].summary;
+    if (!s) continue;
+    const a = N[s.from],
+      b = N[s.to];
+    if (!a || !b || !a.parentId || a.parentId !== b.parentId || !out[a.parentId]) continue;
+    const p = N[a.parentId];
+    const i = p.children.indexOf(s.from),
+      j = p.children.indexOf(s.to);
+    if (i < 0 || j < 0) continue;
+    const first = out[p.children[Math.min(i, j)]];
+    if (!first) continue;
+    const side = first.side;
+    const ids: string[] = [];
+    for (let k = Math.min(i, j); k <= Math.max(i, j); k++) {
+      const c = p.children[k];
+      if (out[c] && out[c].side === side) descend(c, ids);
+    }
+    if (!ids.length) continue;
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
+    for (const id of ids) {
+      const n = out[id];
+      x0 = Math.min(x0, n.x - (n.badge && n.side === "l" ? 26 : 0));
+      x1 = Math.max(x1, n.x + n.w + (n.badge && n.side === "r" ? 26 : 0));
+      y0 = Math.min(y0, n.y - (n.badge && n.side === "u" ? 26 : 0));
+      y1 = Math.max(y1, n.y + n.h + (n.badge && n.side === "d" ? 26 : 0));
+    }
+    const m = measure(sheet, sid, first.depth);
+    const g = 10,
+      L = 16,
+      gap = 8;
+    let d: string, bx: number, by: number;
+    if (side === "l") {
+      const st = x0 - g;
+      d = bracePath(st - L, y0, y1, (y0 + y1) / 2, 1);
+      bx = st - L - gap - m.w;
+      by = (y0 + y1) / 2 - m.h / 2;
+    } else if (side === "d") {
+      const st = y1 + g;
+      d = swapXY(bracePath(st + L, x0, x1, (x0 + x1) / 2, -1));
+      bx = (x0 + x1) / 2 - m.w / 2;
+      by = st + L + gap;
+    } else if (side === "u") {
+      const st = y0 - g;
+      d = swapXY(bracePath(st - L, x0, x1, (x0 + x1) / 2, 1));
+      bx = (x0 + x1) / 2 - m.w / 2;
+      by = st - L - gap - m.h;
+    } else {
+      const st = x1 + g;
+      d = bracePath(st + L, y0, y1, (y0 + y1) / 2, -1);
+      bx = st + L + gap;
+      by = (y0 + y1) / 2 - m.h / 2;
+    }
+    out[sid] = { ...m, x: bx, y: by, side, parentId: null, hasKids: false, hasHidden: false };
+    ctx.edges.push({ key: "sum-" + sid, childId: sid, d, kind: "line" });
+  }
 }
 
 // ---------------------------------------------------------------- horizontal (mind map, logic chart, brace map)

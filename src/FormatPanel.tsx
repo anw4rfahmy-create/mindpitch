@@ -38,8 +38,8 @@ interface Props {
   sheet: Sheet;
   sel: MNode | null;
   count: number;
-  tab: "topic" | "map" | "help";
-  onTab(t: "topic" | "map" | "help"): void;
+  tab: "topic" | "map" | "keys" | "help";
+  onTab(t: "topic" | "map" | "keys" | "help"): void;
   selFloat: string | null;
   onSheet(fn: (s: Sheet) => Sheet): void;
   onNodes(fn: (n: Sheet["nodes"]) => Sheet["nodes"]): void;
@@ -94,6 +94,9 @@ export default function FormatPanel(p: Props) {
           <button className={tab === "map" ? "on" : ""} onClick={() => setTab("map")}>
             Peta
           </button>
+          <button className={tab === "keys" ? "on" : ""} onClick={() => setTab("keys")}>
+            Pintasan
+          </button>
           <button className={tab === "help" ? "on" : ""} onClick={() => setTab("help")}>
             Panduan
           </button>
@@ -104,6 +107,57 @@ export default function FormatPanel(p: Props) {
         </button>
       </div>
 
+
+      {tab === "keys" && (
+        <div className="guide keys">
+          <h4>Topik</h4>
+          <table className="keytable"><tbody>
+            <tr><td><kbd>Tab</kbd></td><td>Tambah anak</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Tambah saudara</td></tr>
+            <tr><td><kbd>F2</kbd></td><td>Ubah teks (atau klik dua kali)</td></tr>
+            <tr><td><kbd>Spasi</kbd></td><td>Lipat / buka cabang</td></tr>
+            <tr><td><kbd>Delete</kbd></td><td>Hapus topik</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>]</kbd></td><td>Buat Ringkasan (kurung) dari topik terpilih</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Batal pilih</td></tr>
+          </tbody></table>
+          <h4>Pindah &amp; susun</h4>
+          <table className="keytable"><tbody>
+            <tr><td><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></td><td>Pindah pilihan antar topik</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>↑ / ↓</kbd></td><td>Naik / turun urutan</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>→</kbd></td><td>Jadikan anak saudara di atasnya (indentasi)</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>←</kbd></td><td>Naikkan satu tingkat</td></tr>
+          </tbody></table>
+          <h4>Pilih banyak</h4>
+          <table className="keytable"><tbody>
+            <tr><td>Shift / Ctrl + klik</td><td>Tambah / buang dari pilihan</td></tr>
+            <tr><td>⫴ Saudara</td><td>Pilih semua topik selevel</td></tr>
+          </tbody></table>
+          <h4>Umum</h4>
+          <table className="keytable"><tbody>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td><td>Urungkan (undo)</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>Y</kbd></td><td>Ulangi (redo)</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></td><td>Ulangi (redo)</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>0</kbd></td><td>Pas layar</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>+</kbd></td><td>Perbesar</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>-</kbd></td><td>Perkecil</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Buka tab Pintasan ini</td></tr>
+          </tbody></table>
+          <h4>Mouse / sentuh</h4>
+          <table className="keytable"><tbody>
+            <tr><td>Seret kanvas</td><td>Geser peta</td></tr>
+            <tr><td>Roda mouse / cubit</td><td>Zoom</td></tr>
+            <tr><td>Seret topik ke topik lain</td><td>Pindahkan topik</td></tr>
+            <tr><td>Ketuk dua kali</td><td>Ubah teks</td></tr>
+          </tbody></table>
+          <h4>Pitch (presentasi)</h4>
+          <table className="keytable"><tbody>
+            <tr><td><kbd>← / →  atau ketuk</kbd></td><td>Langkah sebelum / berikut</td></tr>
+            <tr><td><kbd>A</kbd></td><td>Putar otomatis</td></tr>
+            <tr><td><kbd>N</kbd></td><td>Catatan</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Keluar</td></tr>
+          </tbody></table>
+        </div>
+      )}
 
       {tab === "help" && (
         <div className="guide">
@@ -123,6 +177,7 @@ export default function FormatPanel(p: Props) {
             <li><b>⊖ Lipat / ⊕ Buka</b> sembunyikan/tampilkan cabang</li>
             <li><b>📎</b> lampiran: gambar, PDF, PPT, dll. &nbsp; <b>🖼</b> gambar di dalam topik</li>
             <li><b>☑</b> mode pilih banyak: ketuk beberapa topik, lalu ubah gayanya bersamaan</li>
+            <li><b>⎬ Ringkasan</b> kurung yang merangkum topik terpilih (pilih beberapa saudara dengan ☑ dulu); teksnya bisa diubah &amp; digayakan seperti topik biasa</li>
             <li><b>⫴ Saudara</b> pilih semua topik selevel dalam satu induk</li>
             <li><b>🗑</b> hapus topik terpilih</li>
           </ul>
@@ -144,11 +199,7 @@ export default function FormatPanel(p: Props) {
             <li>Pilih banyak: aktifkan tombol <b>☑</b> lalu ketuk topik-topiknya</li>
           </ul>
           <h4>Pintasan keyboard</h4>
-          <ul>
-            <li><kbd>Tab</kbd> anak · <kbd>Enter</kbd> saudara · <kbd>F2</kbd> ubah · <kbd>Spasi</kbd> lipat/buka · <kbd>Del</kbd> hapus</li>
-            <li><kbd>Shift</kbd>/<kbd>Ctrl</kbd> + klik = pilih banyak</li>
-            <li><kbd>Alt</kbd>+<kbd>↑↓←→</kbd> urutan / indentasi · <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> · <kbd>Ctrl</kbd>+<kbd>0</kbd> pas layar</li>
-          </ul>
+          <p className="muted small">Lihat tab <b>Pintasan</b> (atau tekan <kbd>?</kbd>).</p>
         </div>
       )}
 

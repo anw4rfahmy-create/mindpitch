@@ -25,7 +25,8 @@ Untuk dipasang di ponsel, sajikan folder `dist/` lewat HTTPS (Netlify, Vercel, G
 - **XMind**: buka berkas `.xmind` dan ekspor agar terbuka di XMind (struktur, catatan, status lipat; gaya/gambar/lampiran tidak ikut).
 - **Arsir** pada topik/subtopik (diagonal, silang, titik, garis) per topik atau semua.
 - **Multi-pilih** subtopik (Shift/Ctrl-klik, tombol ☑, atau ⫴ Saudara) untuk mengubah gaya sekaligus.
-- **Tab Panduan** di panel Format (tombol ?).
+- **Ringkasan (Summary)**: pilih beberapa topik bersaudara (☑ / Shift-klik), tekan ⎬ Ringkasan atau Ctrl+]; muncul kurung + topik ringkasan yang bisa diedit/digaya. Ikut tampil di ekspor.
+- **Tab Pintasan** (tombol ? atau tekan ?): daftar tombol keyboard/mouse/sentuh; tab Panduan menjelaskan tombol-tombol layar.
 - Perbaikan tampilan HP: tombol ⊕/⊖ lebih besar dan mudah diketuk, zoom awal terbaca, bilah alat dapat digulir.
 - PDF berupa gambar (teks tidak bisa diseleksi).
 
@@ -38,4 +39,4 @@ Tab = anak · Enter = saudara · F2 = ubah · Spasi = lipat/buka · Delete = hap
 Pitch: ←/→ atau ketuk, `A` putar otomatis, `N` catatan, Esc keluar.
 
 ## Belum ada
-Ringkasan (Summary), Batas (Boundary), dan Relasi dari toolbar XMind; suara pada video Pitch.
+Batas (Boundary) dan Relasi dari toolbar XMind; Ringkasan belum ikut ke berkas .xmind; suara pada video Pitch.

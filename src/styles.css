@@ -1218,3 +1218,8 @@ kbd {
     flex-shrink: 0;
   }
 }
+
+.keytable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.keytable td { padding: 5px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.keytable td:first-child { white-space: nowrap; width: 1%; padding-right: 10px; }
+.keytable kbd { margin-right: 2px; }

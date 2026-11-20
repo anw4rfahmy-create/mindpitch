@@ -125,12 +125,34 @@ export function collectSubtree(nodes: Nodes, id: string): string[] {
   return out;
 }
 
+/** Buat Ringkasan untuk topik-topik bersaudara (satu induk). */
+export function addSummary(nodes: Nodes, ids: string[]): { nodes: Nodes; id: string } | null {
+  const list = ids.map((i) => nodes[i]).filter((n) => n && n.parentId && !n.summary);
+  if (!list.length) return null;
+  const pid = list[0].parentId!;
+  if (list.some((n) => n.parentId !== pid)) return null;
+  const order = nodes[pid].children;
+  const idx = list.map((n) => order.indexOf(n.id)).filter((i) => i >= 0).sort((a, b) => a - b);
+  if (!idx.length) return null;
+  const id = uid();
+  return { id, nodes: { ...nodes, [id]: { id, parentId: null, text: "Ringkasan", children: [], summary: { from: order[idx[0]], to: order[idx[idx.length - 1]] } } } };
+}
+
 export function removeNode(nodes: Nodes, id: string): Nodes {
   const n = nodes[id];
+  if (n?.summary) {
+    const rest = { ...nodes };
+    delete rest[id];
+    return rest;
+  }
   if (!n || !n.parentId) return nodes;
   const gone = new Set(collectSubtree(nodes, id));
   const next: Nodes = {};
   for (const k in nodes) if (!gone.has(k)) next[k] = nodes[k];
+  for (const k in next) {
+    const sm = next[k].summary;
+    if (sm && (gone.has(sm.from) || gone.has(sm.to))) delete next[k];
+  }
   const p = next[n.parentId];
   next[p.id] = { ...p, children: p.children.filter((c) => c !== id) };
   return next;
