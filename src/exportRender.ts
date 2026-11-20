@@ -265,17 +265,17 @@ export async function drawContent(ctx: CanvasRenderingContext2D, sheet: Sheet, l
     if (!ln.badge || !ln.hasHidden) continue;
     const color = styleFor(sheet, sheet.nodes[id], ln.depth).branch;
     ctx.beginPath();
-    ctx.arc(ln.badge.x, ln.badge.y, 9.5, 0, Math.PI * 2);
+    ctx.arc(ln.badge.x, ln.badge.y, 6.5, 0, Math.PI * 2);
     ctx.fillStyle = "#fff";
     ctx.fill();
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.6;
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(ln.badge.x - 4.5, ln.badge.y);
-    ctx.lineTo(ln.badge.x + 4.5, ln.badge.y);
-    ctx.moveTo(ln.badge.x, ln.badge.y - 4.5);
-    ctx.lineTo(ln.badge.x, ln.badge.y + 4.5);
+    ctx.moveTo(ln.badge.x - 3.2, ln.badge.y);
+    ctx.lineTo(ln.badge.x + 3.2, ln.badge.y);
+    ctx.moveTo(ln.badge.x, ln.badge.y - 3.2);
+    ctx.lineTo(ln.badge.x, ln.badge.y + 3.2);
     ctx.stroke();
   }
 }

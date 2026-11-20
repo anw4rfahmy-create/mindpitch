@@ -484,7 +484,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
 
   // ukuran tetap di layar (px) agar mudah disentuh di HP, berapa pun zoom-nya
   const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
-  const badgeScale = Math.min(coarse ? 2.4 : 2.2, Math.max(0.75, (coarse ? 1.1 : 1) / view.k));
+  const badgeScale = Math.min(coarse ? 1.7 : 1.35, Math.max(0.8, (coarse ? 0.95 : 0.85) / view.k));
   const badges = layout.order.map((id) => {
     const ln = layout.nodes[id];
     if (!ln.badge || !ln.hasKids) return null;
@@ -499,8 +499,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         style={{ cursor: "pointer" }}
       >
         <circle r={coarse ? 22 : 14} fill="transparent" />
-        <circle r={9.5} fill="#fff" stroke={color} strokeWidth={2} />
-        <path d={collapsed ? "M-4.5,0 H4.5 M0,-4.5 V4.5" : "M-4.5,0 H4.5"} stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+        <circle r={6.5} fill="#fff" stroke={color} strokeWidth={1.6} />
+        <path d={collapsed ? "M-3.2,0 H3.2 M0,-3.2 V3.2" : "M-3.2,0 H3.2"} stroke={color} strokeWidth={1.7} strokeLinecap="round" />
       </g>
     );
   });
