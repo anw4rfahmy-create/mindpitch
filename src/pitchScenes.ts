@@ -1,4 +1,4 @@
-// Pembangun adegan Pitch bergaya "drill-down" (seperti XMind): topik bergerak dari kanan ke kiri,
+// Pembangun adegan Pitch bergaya "drill-down" (menyelam per cabang): topik bergerak dari kanan ke kiri,
 // kurung kurawal membuka anak-anaknya satu per satu, lalu menyelam ke tingkat berikutnya.
 import { fontString, isRtl } from "./fonts";
 import { textWidth, wrapCached } from "./measure";

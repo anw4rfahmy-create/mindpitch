@@ -77,7 +77,7 @@ export interface PitchSettings {
   bgImageId?: string;
   bgDim: number; // 0..0.8 lapisan gelap di atas gambar latar
   focus: boolean; // judul di tengah sebelum pindah ke kiri
-  credit: boolean; // tulisan "Dibuat dengan MindPitch" pada sampul
+  credit: boolean; // tulisan "Dibuat dengan Map It" pada sampul
   transition: SlideTransition;
   secondsPerStep: number; // untuk putar otomatis & video
   textScale: number; // 0.8 .. 1.4

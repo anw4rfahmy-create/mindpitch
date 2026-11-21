@@ -96,7 +96,7 @@ export default function PitchPanel({ wb, sheet, startId, applySheet, onClose }: 
     setExp(0);
     try {
       const res = await exportVideo(steps, opts, p.secondsPerStep, { onProgress: setExp, signal: ac.signal });
-      download(res.blob, `${safeName(wb.title + "-" + sheet.title)}-pitch.${res.ext}`);
+      download(res.blob, `${safeName(wb.title + "-" + sheet.title)}-presentasi.${res.ext}`);
     } catch (e) {
       if ((e as Error).name !== "AbortError") alert((e as Error).message || "Gagal mengekspor video");
     } finally {
@@ -121,7 +121,7 @@ export default function PitchPanel({ wb, sheet, startId, applySheet, onClose }: 
   return (
     <div className="overlay pitch">
       <div className="pitch-head">
-        <h2>🎬 Pitch</h2>
+        <h2>🎬 Presentasi</h2>
         <span className="muted small">
           {steps.length} langkah · ±{totalSec} dtk
         </span>
@@ -205,7 +205,7 @@ export default function PitchPanel({ wb, sheet, startId, applySheet, onClose }: 
             </div>
           </div>
           <div className="field">
-            <span>Gambar latar Pitch</span>
+            <span>Gambar latar presentasi</span>
             <div className="seg wrap">
               <button onClick={() => bgInput.current?.click()}>{p.bgImageId ? "Ganti gambar" : "＋ Gambar latar"}</button>
               {p.bgImageId && <button onClick={() => set({ bgImageId: undefined })}>Hapus</button>}

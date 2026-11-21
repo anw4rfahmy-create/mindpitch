@@ -81,7 +81,7 @@ export function sampleWorkbook(): Workbook {
   ]);
 
   const now = Date.now();
-  return { id: uid(), title: "Contoh MindPitch", sheets: [a, b, c], activeId: a.id, createdAt: now, updatedAt: now };
+  return { id: uid(), title: "Contoh Map It", sheets: [a, b, c], activeId: a.id, createdAt: now, updatedAt: now };
 }
 
 export const activeSheet = (wb: Workbook): Sheet => wb.sheets.find((s) => s.id === wb.activeId) ?? wb.sheets[0];

@@ -35,7 +35,7 @@ export async function importFile(file: File): Promise<Workbook | null> {
   const name = file.name.toLowerCase();
   try {
     if (name.endsWith(".xmind")) return await fromXmind(file);
-    if (name.endsWith(".mindpitch") || name.endsWith(".zip")) {
+    if (name.endsWith(".mapit") || name.endsWith(".mindpitch") || name.endsWith(".zip")) {
       const z = unzipSync(new Uint8Array(await file.arrayBuffer()));
       const meta = JSON.parse(strFromU8(z["workbook.json"]));
       const wb = normalizeWorkbook(meta.workbook);

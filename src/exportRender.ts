@@ -436,7 +436,7 @@ export interface PdfPage {
   ptH: number;
 }
 
-export function buildPdf(pages: PdfPage[], title = "MindPitch"): Blob {
+export function buildPdf(pages: PdfPage[], title = "Map It"): Blob {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
   const offsets: number[] = [];
@@ -473,7 +473,7 @@ export function buildPdf(pages: PdfPage[], title = "MindPitch"): Blob {
   });
   const infoN = nObj;
   begin(infoN);
-  push(`<< /Title (${title.replace(/[()\\]/g, "").replace(/[^\x20-\x7E]/g, "?")}) /Producer (MindPitch) >>\nendobj\n`);
+  push(`<< /Title (${title.replace(/[()\\]/g, "").replace(/[^\x20-\x7E]/g, "?")}) /Producer (Map It) >>\nendobj\n`);
   const xref = pos;
   push(`xref\n0 ${nObj + 1}\n0000000000 65535 f \n`);
   for (let i = 1; i <= nObj; i++) push(String(offsets[i]).padStart(10, "0") + " 00000 n \n");

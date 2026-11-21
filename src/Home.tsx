@@ -80,7 +80,7 @@ export default function Home({ onOpen }: Props) {
 
   const importFile = async (f: File) => {
     const d = await importAny(f);
-    if (!d) return alert("Berkas tidak dikenali. Gunakan berkas .mindpitch, JSON hasil ekspor, atau Markdown/teks berindentasi.");
+    if (!d) return alert("Berkas tidak dikenali. Gunakan berkas .mapit, peta dari aplikasi lain, JSON hasil ekspor, atau Markdown/teks berindentasi.");
     await saveDoc(d);
     onOpen(d);
   };
@@ -89,7 +89,7 @@ export default function Home({ onOpen }: Props) {
     <div className="home">
       <header className="home-head">
         <div>
-          <h1>MindPitch</h1>
+          <h1>Map It</h1>
           <p className="muted">Peta pikiran yang bisa langsung jadi presentasi dan video.</p>
         </div>
         <div className="spacer" />
@@ -113,7 +113,7 @@ export default function Home({ onOpen }: Props) {
         <input
           ref={fileRef}
           type="file"
-          accept=".mindpitch,.xmind,.zip,.json,.md,.markdown,.txt"
+          accept=".mapit,.mindpitch,.xmind,.zip,.json,.md,.markdown,.txt"
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];

@@ -1,5 +1,5 @@
-/* Service worker MindPitch: offline-first untuk berkas aplikasi. Data peta disimpan di IndexedDB (lokal). */
-const CACHE = "mindpitch-v3";
+/* Service worker Map It: offline-first untuk berkas aplikasi. Data peta disimpan di IndexedDB (lokal). */
+const CACHE = "mapit-v4";
 const CORE = [
   "./",
   "./index.html",

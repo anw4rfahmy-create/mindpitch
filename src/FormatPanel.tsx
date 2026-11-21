@@ -149,7 +149,7 @@ export default function FormatPanel(p: Props) {
             <tr><td>Seret topik ke topik lain</td><td>Pindahkan topik</td></tr>
             <tr><td>Ketuk dua kali</td><td>Ubah teks</td></tr>
           </tbody></table>
-          <h4>Pitch (presentasi)</h4>
+          <h4>Presentasi</h4>
           <table className="keytable"><tbody>
             <tr><td><kbd>← / →  atau ketuk</kbd></td><td>Langkah sebelum / berikut</td></tr>
             <tr><td><kbd>A</kbd></td><td>Putar otomatis</td></tr>
@@ -167,8 +167,8 @@ export default function FormatPanel(p: Props) {
             <li><b>↶ ↷</b> urungkan / ulangi</li>
             <li><b>☰ Outline</b> edit sebagai daftar berindentasi</li>
             <li><b>🎨 Format</b> panel ini: Topik, Peta, Panduan</li>
-            <li><b>⬇ Ekspor</b> PDF, PNG, SVG (pilih ukuran &amp; bingkai), XMind, MindPitch, Markdown</li>
-            <li><b>🎬 Pitch</b> presentasi &amp; video bergaya XMind</li>
+            <li><b>⬇ Ekspor</b> PDF, PNG, SVG (pilih ukuran &amp; bingkai), format lintas aplikasi, Map It, Markdown</li>
+            <li><b>🎬 Presentasi</b> tampil per langkah &amp; ekspor video</li>
           </ul>
           <h4>Bilah bawah topik</h4>
           <ul>

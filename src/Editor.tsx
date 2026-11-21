@@ -521,7 +521,7 @@ export default function Editor({ initial, onBack }: Props) {
           ⬇ <span className="hide-sm">Ekspor</span>
         </button>
         <button className="btn primary" onClick={() => setShowPitch(true)}>
-          {sheet.table ? "▶ Tampil" : "🎬 Pitch"}
+          {sheet.table ? "▶ Presentasi" : "🎬 Presentasi"}
         </button>
       </header>
 

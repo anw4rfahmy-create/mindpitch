@@ -11,8 +11,8 @@ const FORMATS: { id: Fmt; label: string; sub: string }[] = [
   { id: "pdf", label: "PDF", sub: "A4, B5, dll." },
   { id: "png", label: "Gambar PNG", sub: "rasio 3:4, 16:9, dll." },
   { id: "svg", label: "Gambar SVG", sub: "vektor" },
-  { id: "xmind", label: "XMind", sub: ".xmind" },
-  { id: "mindpitch", label: "MindPitch", sub: "semua lembar + lampiran" },
+  { id: "xmind", label: "Lintas aplikasi", sub: "peta pikiran umum" },
+  { id: "mindpitch", label: "Map It", sub: "semua lembar + lampiran" },
   { id: "md", label: "Markdown", sub: "lembar ini" },
 ];
 
@@ -57,7 +57,7 @@ export default function ExportDialog({ wb, sheet, onClose, onDone }: Props) {
     setBusy(true);
     try {
       const base = safeName(wb.title + (fmt === "mindpitch" || fmt === "xmind" ? "" : "-" + sheet.title));
-      if (fmt === "mindpitch") download(await toMindpitch(wb), `${safeName(wb.title)}.mindpitch`);
+      if (fmt === "mindpitch") download(await toMindpitch(wb), `${safeName(wb.title)}.mapit`);
       else if (fmt === "xmind") download(toXmind(wb), `${safeName(wb.title)}.xmind`);
       else if (fmt === "md") download(new Blob([sheetToMarkdown(sheet)], { type: "text/markdown" }), `${base}.md`);
       else if (fmt === "svg") download(new Blob([await renderSvg(sheet, opts, o.title ? sheet.title : undefined)], { type: "image/svg+xml" }), `${base}.svg`);
@@ -77,7 +77,7 @@ export default function ExportDialog({ wb, sheet, onClose, onDone }: Props) {
 
   const share = async () => {
     try {
-      const f = new File([await toMindpitch(wb)], `${safeName(wb.title)}.mindpitch`, { type: "application/zip" });
+      const f = new File([await toMindpitch(wb)], `${safeName(wb.title)}.mapit`, { type: "application/zip" });
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
       if (nav.canShare?.({ files: [f] })) await nav.share({ files: [f], title: wb.title });
       else onDone("Perangkat ini tidak mendukung menu Bagikan. Gunakan Ekspor lalu simpan ke akun awan Anda.");
@@ -206,7 +206,7 @@ export default function ExportDialog({ wb, sheet, onClose, onDone }: Props) {
               </>
             )}
 
-            {fmt === "xmind" && <p className="muted small">Berkas .xmind berisi semua lembar, struktur peta, dan catatan, bisa dibuka di XMind. Gaya warna, gambar, dan lampiran tidak ikut terbawa.</p>}
+            {fmt === "xmind" && <p className="muted small">Berkas peta pikiran umum: berisi semua lembar, struktur peta, dan catatan, dan bisa dibuka di aplikasi peta pikiran lain yang mendukung formatnya. Gaya warna, gambar, dan lampiran tidak ikut terbawa.</p>}
             {fmt === "mindpitch" && (
               <>
                 <p className="muted small">Cadangan penuh semua lembar beserta gambar & lampiran. Simpan ke Google Drive/iCloud lewat Bagikan agar tersinkron di akun Anda.</p>

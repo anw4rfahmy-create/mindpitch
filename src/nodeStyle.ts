@@ -40,7 +40,7 @@ export function defaultShape(sheet: Sheet, depth: number): NodeShape {
   if (ts === "pill") return "pill";
   if (ts === "line") return "line";
   if (ts === "none") return depth === 1 ? "rounded" : "none";
-  // otomatis (gaya XMind): topik utama berwarna, sub-topik teks di atas garis
+  // otomatis (gaya klasik): topik utama berwarna, sub-topik teks di atas garis
   if (sheet.structure === "org-down" || sheet.structure === "org-up") return depth === 1 ? "rounded" : "box";
   return depth === 1 ? "rounded" : "line";
 }
