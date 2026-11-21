@@ -80,6 +80,42 @@ export default function TableEditor({ sheet, onChange, onPresent }: Props) {
   const t = sheet.table!;
   const [sel, setSel] = useState<Sel>({ kind: "cell", r: 0, c: 0 });
   const [tick, setTick] = useState(0);
+  const [live, setLive] = useState<number[] | null>(null);
+  const thRefs = useRef<(HTMLTableCellElement | null)[]>([]);
+  const W = live ?? t.colW;
+  const setW = W.filter((w) => w > 0);
+  const anySet = setW.length > 0;
+  const avgW = anySet ? setW.reduce((a, b) => a + b, 0) / setW.length : 1;
+  const wOf = (c: number) => (W[c] > 0 ? W[c] : avgW);
+  const totalW = Array.from({ length: t.cols }, (_, c) => wOf(c)).reduce((a, b) => a + b, 0);
+  const startResize = (c: number) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const px = Array.from({ length: t.cols }, (_, i) => thRefs.current[i]?.offsetWidth || 100);
+    const x0 = e.clientX;
+    const dir = t.rtl ? -1 : 1;
+    const j = c + 1;
+    const MIN = 50;
+    let last = px;
+    const move = (ev: PointerEvent) => {
+      const dx = (ev.clientX - x0) * dir;
+      const wi = Math.max(MIN, Math.min(px[c] + px[j] - MIN, px[c] + dx));
+      const n = px.slice();
+      n[c] = wi;
+      n[j] = px[c] + px[j] - wi;
+      last = n;
+      setLive(n);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const done = last.map((v) => Math.round(v));
+      setLive(null);
+      onChange((x) => ({ ...x, colW: done }));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   useEffect(() => {
     ensureFonts([t.font, t.arFont]).then(() => setTick((x) => x + 1));
   }, [t.font, t.arFont]);
@@ -128,13 +164,6 @@ export default function TableEditor({ sheet, onChange, onPresent }: Props) {
   const ar = sel.kind === "all" ? 0 : sel.r;
   const ac = sel.kind === "all" ? 0 : sel.c;
   const colSel = sel.kind === "col" || sel.kind === "cell" ? sel.c : 0;
-  const stepCol = (d: number) =>
-    onChange((x) => {
-      const n = cloneTable(x);
-      const cur = n.colW[colSel] > 0 ? n.colW[colSel] : 140;
-      n.colW[colSel] = d === 0 ? 0 : Math.max(60, Math.min(500, cur + d));
-      return n;
-    });
   const rowsSel = sel.kind === "col" ? 0 : ar;
 
   return (
@@ -151,9 +180,7 @@ export default function TableEditor({ sheet, onChange, onPresent }: Props) {
           <button className="btn small" onClick={() => onChange((x) => insertCol(x, x.rtl ? colSel + 1 : colSel))} title="Sisipkan kolom di kiri">◀＋</button>
           <button className="btn small" onClick={() => onChange((x) => insertCol(x, x.rtl ? colSel : colSel + 1))} title="Sisipkan kolom di kanan">＋▶</button>
           <button className="btn small danger" onClick={() => onChange((x) => deleteCol(x, colSel))} title="Hapus kolom">✕</button>
-          <button className="btn small" onClick={() => stepCol(-20)} title="Persempit kolom">⇤</button>
-          <button className="btn small" onClick={() => stepCol(20)} title="Lebarkan kolom">⇥</button>
-          <button className="btn small" onClick={() => stepCol(0)} title="Lebar otomatis">auto</button>
+          <button className="btn small" onClick={() => onChange((x) => ({ ...x, colW: Array(x.cols).fill(0) }))} title="Kembalikan lebar semua kolom ke otomatis">Lebar otomatis</button>
         </div>
         <div className="tbl-group">
           <span className="tbl-label">Header</span>
@@ -210,19 +237,20 @@ export default function TableEditor({ sheet, onChange, onPresent }: Props) {
         Ketik langsung di sel · <kbd>Enter</kbd> turun · <kbd>Tab</kbd> ke sel berikut · <kbd>Shift</kbd>+<kbd>Enter</kbd> baris baru dalam sel · tempel (Ctrl+V) tabel dari Word/Excel akan mengisi banyak sel sekaligus · klik nomor baris/kolom untuk memilihnya.
       </div>
       <div className="tbl-scroll">
-        <table className="tbl" dir={t.rtl ? "rtl" : "ltr"}>
+        <table className="tbl" dir={t.rtl ? "rtl" : "ltr"} style={{ width: "calc(100% - 34px)", marginInlineStart: 34, tableLayout: anySet ? "fixed" : "auto" }}>
           <colgroup>
-            <col style={{ width: 34 }} />
+            <col style={{ width: 0 }} />
             {Array.from({ length: t.cols }, (_, c) => (
-              <col key={c} style={t.colW[c] > 0 ? { width: t.colW[c] } : { minWidth: 90 }} />
+              <col key={c} style={anySet ? { width: `${(wOf(c) / totalW) * 100}%` } : { minWidth: 90 }} />
             ))}
           </colgroup>
           <thead>
             <tr>
-              <th className="tbl-corner" onClick={() => setSel({ kind: "all", r: 0, c: 0 })} title="Pilih semua" />
+              <th className="tbl-corner tbl-gut" onClick={() => setSel({ kind: "all", r: 0, c: 0 })} title="Pilih semua" />
               {Array.from({ length: t.cols }, (_, c) => (
-                <th key={c} className={"tbl-h" + ((sel.kind === "col" && sel.c === c) ? " on" : "")} onClick={() => setSel({ kind: "col", r: 0, c })}>
+                <th key={c} ref={(el) => (thRefs.current[c] = el)} className={"tbl-h" + ((sel.kind === "col" && sel.c === c) ? " on" : "")} onClick={() => setSel({ kind: "col", r: 0, c })}>
                   {c + 1}
+                  {c < t.cols - 1 && <span className="col-grip" onPointerDown={startResize(c)} onClick={(e) => e.stopPropagation()} title="Seret untuk mengubah lebar kolom" />}
                 </th>
               ))}
             </tr>
@@ -230,7 +258,7 @@ export default function TableEditor({ sheet, onChange, onPresent }: Props) {
           <tbody>
             {Array.from({ length: t.rows }, (_, r) => (
               <tr key={r}>
-                <th className={"tbl-h" + (sel.kind === "row" && sel.r === r ? " on" : "")} onClick={() => setSel({ kind: "row", r, c: 0 })}>
+                <th className={"tbl-h tbl-gut" + (sel.kind === "row" && sel.r === r ? " on" : "")} onClick={() => setSel({ kind: "row", r, c: 0 })}>
                   {r + 1}
                 </th>
                 {Array.from({ length: t.cols }, (_, c) => (

@@ -26,7 +26,7 @@ Untuk dipasang di ponsel, sajikan folder `dist/` lewat HTTPS (Netlify, Vercel, G
 - **Arsir** pada topik/subtopik (diagonal, silang, titik, garis) per topik atau semua.
 - **Multi-pilih** subtopik (Shift/Ctrl-klik, tombol ☑, atau ⫴ Saudara) untuk mengubah gaya sekaligus.
 - **Ringkasan (Summary)**: pilih beberapa topik bersaudara (☑ / Shift-klik), tekan ⎬ Ringkasan atau Ctrl+]; muncul kurung + topik ringkasan yang bisa diedit/digaya. Ikut tampil di ekspor.
-- **Lembar Tabel** (mis. untuk tashrif): tombol ＋ lembar › Tabel kosong / Tashrif istilahi / Tashrif lughawi. Sel Arab (font Amiri dll.), arah kanan→kiri, tempel dari Word/Excel, sisip/hapus baris & kolom, warna/tebal/rata, header, ekspor PDF/PNG/SVG/Markdown, dan **Tampilkan bertahap** (per baris/kolom/sel).
+- **Lembar Tabel** (mis. untuk tashrif): tombol ＋ lembar › Tabel kosong / Tashrif istilahi / Tashrif lughawi. Sel Arab (font Amiri dll.), arah kanan→kiri, tempel dari Word/Excel, sisip/hapus baris & kolom, warna/tebal/rata, header, ekspor PDF/PNG/SVG/Markdown, seret batas kolom untuk mengatur lebar (tetap tepi ke tepi), dan **Tampilkan bertahap** (per baris, per kolom, per sel → atau ↓, atau ketuk sel untuk memunculkan).
 - **Tab Pintasan** (tombol ? atau tekan ?): daftar tombol keyboard/mouse/sentuh; tab Panduan menjelaskan tombol-tombol layar.
 - Perbaikan tampilan HP: tombol ⊕/⊖ lebih besar dan mudah diketuk, zoom awal terbaca, bilah alat dapat digulir.
 - PDF berupa gambar (teks tidak bisa diseleksi).
