@@ -3,6 +3,7 @@ import { textWidth, wrapCached } from "./measure";
 import { effectiveShape, lineStyleFor } from "./nodeStyle";
 import { NodeShape, Sheet } from "./types";
 import { tableGeom } from "./table";
+import { boundaryRects, CHIP_FONT, Deco, EQ_FONT, GLYPH_FONT, layoutDeco } from "./deco";
 
 export type Side = "c" | "r" | "l" | "d" | "u";
 
@@ -26,6 +27,7 @@ export interface LNode {
   badge?: { x: number; y: number };
   rtl: boolean;
   shape: NodeShape;
+  deco?: Deco;
 }
 
 export interface LEdge {
@@ -118,10 +120,13 @@ function measure(sheet: Sheet, id: string, depth: number): Omit<LNode, "x" | "y"
       imgW = imgH * n.image.ar;
     }
   }
-  const inner = Math.max(tw, imgW);
+  const dl = layoutDeco(n, (f, t) => textWidth(f, t));
+  const inner = Math.max(tw, imgW, dl.rowW);
   const minW = depth === 0 ? 96 : flat ? 30 : 56;
   const w = Math.max(minW, Math.ceil(inner) + padX * 2);
-  const h = lines.length * lineH + (imgH ? imgH + 6 : 0) + padY * 2;
+  const h = lines.length * lineH + (imgH ? imgH + 6 : 0) + dl.topH + dl.bottomH + padY * 2;
+  const textTop = padY + dl.topH + (imgH ? imgH + 6 : 0);
+  const deco = dl.topH || dl.bottomH ? dl.build(w, padY, textTop + lines.length * lineH) : undefined;
   return {
     id,
     w,
@@ -130,8 +135,9 @@ function measure(sheet: Sheet, id: string, depth: number): Omit<LNode, "x" | "y"
     font,
     fontSize: size,
     lineH,
-    textTop: padY + (imgH ? imgH + 6 : 0),
-    img: n.image ? { x: (w - imgW) / 2, y: padY, w: imgW, h: imgH, fileId: n.image.fileId } : undefined,
+    textTop,
+    deco,
+    img: n.image ? { x: (w - imgW) / 2, y: padY + dl.topH, w: imgW, h: imgH, fileId: n.image.fileId } : undefined,
     depth,
     rtl,
     shape,
@@ -140,6 +146,20 @@ function measure(sheet: Sheet, id: string, depth: number): Omit<LNode, "x" | "y"
 
 // ---------------------------------------------------------------- tata letak
 export function computeLayout(sheet: Sheet): LayoutResult {
+  const r = computeLayoutBase(sheet);
+  if (sheet.table) return r;
+  let b = r.bounds;
+  for (const q of boundaryRects(sheet, r)) {
+    const x0 = Math.min(b.x, q.x - 2),
+      y0 = Math.min(b.y, q.y - 2),
+      x1 = Math.max(b.x + b.w, q.x + q.w + 2),
+      y1 = Math.max(b.y + b.h, q.y + q.h + 2);
+    b = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+  return { ...r, bounds: b };
+}
+
+function computeLayoutBase(sheet: Sheet): LayoutResult {
   if (sheet.table) {
     const g = tableGeom(sheet);
     return { nodes: {}, order: [], edges: [], bounds: { x: -2, y: -2, w: g.w + 4, h: g.h + 4 } };

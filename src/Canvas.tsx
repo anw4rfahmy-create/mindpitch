@@ -16,7 +16,9 @@ import { edgeWidth, radiusFor, styleFor } from "./nodeStyle";
 import { isDescendant } from "./model";
 import { filesVersion, subscribeFiles, urlOf } from "./files";
 import { isRtl } from "./fonts";
-import { patternDef, patternId } from "./patterns";
+import { patternDef, patternId, RegularPattern } from "./patterns";
+import { isSketch, sketchGeom } from "./sketch";
+import { boundaryRects, CHIP_FONT, CHIP_H, EQ_FONT, GLYPH_FONT, relationGeoms } from "./deco";
 
 interface View {
   x: number;
@@ -26,6 +28,8 @@ interface View {
 
 export interface CanvasHandle {
   fit(): void;
+  actual(): void;
+  focusNode(id: string, k?: number): void;
   zoomBy(factor: number): void;
 }
 
@@ -47,6 +51,10 @@ interface Props {
   onToggleCollapse(id: string): void;
   onFloatChange(id: string, patch: { x?: number; y?: number; w?: number; h?: number }, commit: boolean): void;
   onOpenAttachments(id: string): void;
+  selRel?: string | null;
+  onSelectRel?(id: string | null): void;
+  onDeco?(id: string, kind: string): void;
+  pickMode?: boolean;
 }
 
 const MIN_K = 0.1;
@@ -123,8 +131,22 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         const { w, h } = size();
         zoomAt(f, w / 2, h / 2);
       },
+      actual: () => {
+        const { w, h } = size();
+        const v = viewRef.current;
+        const wx = (w / 2 - v.x) / v.k,
+          wy = (h / 2 - v.y) / v.k;
+        setView({ k: 1, x: w / 2 - wx, y: h / 2 - wy });
+      },
+      focusNode: (id: string, k?: number) => {
+        const ln = layout.nodes[id];
+        if (!ln) return;
+        const { w, h } = size();
+        const kk = k ?? Math.max(0.6, viewRef.current.k);
+        setView({ k: kk, x: w / 2 - (ln.x + ln.w / 2) * kk, y: (h - 40) / 2 - (ln.y + ln.h / 2) * kk });
+      },
     }),
-    [fit, zoomAt]
+    [fit, zoomAt, layout, setView]
   );
 
   useLayoutEffect(() => {
@@ -216,6 +238,21 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     const clip = el.closest("[data-clip]");
     if (clip) {
       props.onOpenAttachments(clip.getAttribute("data-clip")!);
+      pointers.current.delete(e.pointerId);
+      return;
+    }
+    const dc = el.closest("[data-deco]");
+    if (dc && props.onDeco) {
+      const kind = dc.getAttribute("data-deco")!;
+      if (kind === "link" || kind === "audio" || kind === "task") {
+        props.onDeco(dc.getAttribute("data-did")!, kind);
+        pointers.current.delete(e.pointerId);
+        return;
+      }
+    }
+    const relEl = el.closest("[data-rel]");
+    if (relEl && props.onSelectRel && !props.pickMode) {
+      props.onSelectRel(relEl.getAttribute("data-rel"));
       pointers.current.delete(e.pointerId);
       return;
     }
@@ -401,16 +438,40 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
               </>
             ) : st.shape === "none" ? (
               <rect width={ln.w} height={ln.h} fill="transparent" />
+            ) : st.pattern && isSketch(st.pattern) ? (
+              (() => {
+                const g = sketchGeom(id, st.pattern!, st.shape, ln.w, ln.h, r);
+                const cid = "skc-" + id.replace(/[^a-z0-9]/gi, "");
+                return (
+                  <>
+                    <path d={g.fill} fill={st.fill} stroke="none" />
+                    {g.hatch && (
+                      <>
+                        <clipPath id={cid}>
+                          <path d={g.fill} />
+                        </clipPath>
+                        <path d={g.hatch} clipPath={`url(#${cid})`} fill="none" stroke={st.patternColor} strokeWidth={1.8} strokeLinecap="round" pointerEvents="none" />
+                      </>
+                    )}
+                    {st.stroke !== "none" && (
+                      <>
+                        <path d={g.outline} fill="none" stroke={st.stroke} strokeWidth={st.strokeWidth} strokeDasharray={st.dash} pointerEvents="none" />
+                        <path d={g.outline2} fill="none" stroke={st.stroke} strokeWidth={Math.max(1, st.strokeWidth * 0.7)} opacity={0.75} strokeDasharray={st.dash} pointerEvents="none" />
+                      </>
+                    )}
+                  </>
+                );
+              })()
             ) : st.shape === "ellipse" ? (
-              <ellipse cx={ln.w / 2} cy={ln.h / 2} rx={ln.w / 2} ry={ln.h / 2} fill={st.fill} stroke={st.stroke} strokeWidth={st.strokeWidth} />
+              <ellipse cx={ln.w / 2} cy={ln.h / 2} rx={ln.w / 2} ry={ln.h / 2} fill={st.fill} stroke={st.stroke} strokeWidth={st.strokeWidth} strokeDasharray={st.dash} />
             ) : (
-              <rect width={ln.w} height={ln.h} rx={r} fill={st.fill} stroke={st.stroke} strokeWidth={st.strokeWidth} />
+              <rect width={ln.w} height={ln.h} rx={r} fill={st.fill} stroke={st.stroke} strokeWidth={st.strokeWidth} strokeDasharray={st.dash} />
             )}
-            {st.pattern && st.shape !== "line" && st.shape !== "none" &&
+            {st.pattern && !isSketch(st.pattern) && st.shape !== "line" && st.shape !== "none" &&
               (st.shape === "ellipse" ? (
-                <ellipse cx={ln.w / 2} cy={ln.h / 2} rx={ln.w / 2} ry={ln.h / 2} fill={`url(#${patternId(st.pattern, st.patternColor)})`} pointerEvents="none" />
+                <ellipse cx={ln.w / 2} cy={ln.h / 2} rx={ln.w / 2} ry={ln.h / 2} fill={`url(#${patternId(st.pattern as RegularPattern, st.patternColor)})`} pointerEvents="none" />
               ) : (
-                <rect width={ln.w} height={ln.h} rx={r} fill={`url(#${patternId(st.pattern, st.patternColor)})`} pointerEvents="none" />
+                <rect width={ln.w} height={ln.h} rx={r} fill={`url(#${patternId(st.pattern as RegularPattern, st.patternColor)})`} pointerEvents="none" />
               ))}
             {ln.img && imgUrl && (
               <image href={imgUrl} x={ln.img.x} y={ln.img.y} width={ln.img.w} height={ln.img.h} preserveAspectRatio="xMidYMid slice" pointerEvents="none" />
@@ -433,6 +494,28 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
                   {l}
                 </text>
               ))}
+            {ln.deco && (
+              <g>
+                {ln.deco.glyphs.map((g, i) => (
+                  <text key={i} data-deco={g.kind} data-did={id} x={g.x} y={ln.deco!.glyphY} textAnchor="middle" dominantBaseline="central" style={{ font: GLYPH_FONT, userSelect: "none", cursor: g.kind === "marker" || g.kind === "sticker" ? "pointer" : "pointer" }}>
+                    {g.text}
+                  </text>
+                ))}
+                {ln.deco.chips.map((c, i) => (
+                  <g key={"c" + i} pointerEvents="none">
+                    <rect x={c.x} y={ln.deco!.chipsY - CHIP_H / 2} width={c.w} height={CHIP_H} rx={CHIP_H / 2} fill="rgba(255,255,255,.92)" stroke="#94a3b8" strokeWidth={0.8} />
+                    <text x={c.x + c.w / 2} y={ln.deco!.chipsY} textAnchor="middle" dominantBaseline="central" fill="#334155" style={{ font: CHIP_FONT, userSelect: "none" }}>
+                      {c.text}
+                    </text>
+                  </g>
+                ))}
+                {ln.deco.eq && (
+                  <text x={ln.w / 2} y={ln.deco.eqY} textAnchor="middle" dominantBaseline="central" fill={st.text} pointerEvents="none" style={{ font: EQ_FONT, userSelect: "none" }}>
+                    {ln.deco.eq}
+                  </text>
+                )}
+              </g>
+            )}
             {n.note && <circle cx={ln.w - 3} cy={3} r={4.5} fill="#f59e0b" stroke="#fff" strokeWidth={1.5} pointerEvents="none" />}
             {ac > 0 && (
               <g data-clip={id} transform={`translate(${ln.w - 2},${ln.h - 2})`} style={{ cursor: "pointer" }}>
@@ -468,16 +551,43 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     [layout, sheet, selectedId, editingId, multiIds, filesVersion()]
   );
 
+  const boundaries = useMemo(
+    () =>
+      boundaryRects(sheet, layout).map((b) => (
+        <rect key={"b" + b.id} x={b.x} y={b.y} width={b.w} height={b.h} rx={16} fill={b.color} fillOpacity={0.07} stroke={b.color} strokeWidth={1.6} strokeDasharray="7 5" pointerEvents="none" />
+      )),
+    [layout, sheet]
+  );
+  const relEls = useMemo(
+    () =>
+      relationGeoms(sheet, layout).map((r) => {
+        const on = r.id === props.selRel;
+        return (
+          <g key={"r" + r.id} data-rel={r.id} style={{ cursor: "pointer" }}>
+            <path d={r.d} fill="none" stroke="transparent" strokeWidth={16} />
+            <path d={r.d} fill="none" stroke={on ? "#4f46e5" : r.color} strokeWidth={on ? 3 : 2} strokeDasharray="7 4" strokeLinecap="round" />
+            <path d={r.arrow} fill="none" stroke={on ? "#4f46e5" : r.color} strokeWidth={on ? 3 : 2} strokeLinecap="round" strokeLinejoin="round" />
+            {r.label && (
+              <text x={r.lx} y={r.ly} textAnchor="middle" dominantBaseline="central" fill={r.color} stroke="#fff" strokeWidth={4} paintOrder="stroke" style={{ font: "600 12px system-ui", userSelect: "none" }}>
+                {r.label}
+              </text>
+            )}
+          </g>
+        );
+      }),
+    [layout, sheet, props.selRel]
+  );
+
   const patternDefs = useMemo(() => {
     const seen = new Set<string>();
     let out = "";
     for (const id of layout.order) {
       const st = styleFor(sheet, sheet.nodes[id], layout.nodes[id].depth);
-      if (!st.pattern) continue;
-      const k = patternId(st.pattern, st.patternColor);
+      if (!st.pattern || isSketch(st.pattern)) continue;
+      const k = patternId(st.pattern as RegularPattern, st.patternColor);
       if (seen.has(k)) continue;
       seen.add(k);
-      out += patternDef(st.pattern, st.patternColor);
+      out += patternDef(st.pattern as RegularPattern, st.patternColor);
     }
     return out;
   }, [layout, sheet]);
@@ -572,8 +682,10 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         <defs dangerouslySetInnerHTML={{ __html: patternDefs }} />
         <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
           {floats}
+          {boundaries}
           {edges}
           {nodeEls}
+          {relEls}
           {ghost}
           <g>{badges}</g>
         </g>

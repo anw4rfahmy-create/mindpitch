@@ -2,7 +2,7 @@ import { FONTS } from "./fonts";
 import { NODE_COLORS } from "./nodeStyle";
 import { MAP_PALETTES } from "./themes";
 import { reorder, outdent, indent, foldToLevel, maxDepth } from "./model";
-import { PATTERNS } from "./patterns";
+import { PATTERNS, SKETCH_PATTERNS } from "./patterns";
 import { ImgSize, PatternId, LineStyle, MNode, NodeShape, Sheet, StructureId, TopicStyle } from "./types";
 
 export const STRUCTURES: { id: StructureId; label: string; icon: string }[] = [
@@ -40,6 +40,8 @@ interface Props {
   count: number;
   tab: "topic" | "map" | "keys" | "help";
   onTab(t: "topic" | "map" | "keys" | "help"): void;
+  shortcuts: Record<string, string>;
+  onCustomize(): void;
   selFloat: string | null;
   onSheet(fn: (s: Sheet) => Sheet): void;
   onNodes(fn: (n: Sheet["nodes"]) => Sheet["nodes"]): void;
@@ -118,8 +120,20 @@ export default function FormatPanel(p: Props) {
             <tr><td><kbd>F2</kbd></td><td>Ubah teks (atau klik dua kali)</td></tr>
             <tr><td><kbd>Spasi</kbd></td><td>Lipat / buka cabang</td></tr>
             <tr><td><kbd>Delete</kbd></td><td>Hapus topik</td></tr>
-            <tr><td><kbd>Ctrl</kbd> + <kbd>]</kbd></td><td>Buat Ringkasan (kurung) dari topik terpilih</td></tr>
+            <tr><td><kbd>{p.shortcuts.summary}</kbd></td><td>Buat Ringkasan (kurung) dari topik terpilih</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Batal pilih</td></tr>
+          </tbody></table>
+          <h4>Hubungan, Batas &amp; Sisipkan</h4>
+          <table className="keytable"><tbody>
+            <tr><td><kbd>{p.shortcuts.relation}</kbd></td><td>Hubungan: garis panah antar dua topik</td></tr>
+            <tr><td><kbd>{p.shortcuts.boundary}</kbd></td><td>Batas: bingkai putus-putus di sekeliling topik + turunannya</td></tr>
+            <tr><td><kbd>{p.shortcuts.marker}</kbd></td><td>Penanda (bintang, bendera, prioritas, dll.)</td></tr>
+            <tr><td><kbd>{p.shortcuts.link}</kbd></td><td>Tautan (halaman web / topik / lembar)</td></tr>
+            <tr><td><kbd>{p.shortcuts.note}</kbd></td><td>Catatan</td></tr>
+            <tr><td><kbd>{p.shortcuts.label}</kbd></td><td>Label</td></tr>
+            <tr><td><kbd>{p.shortcuts.task}</kbd></td><td>Tugas (kemajuan 0–100%)</td></tr>
+            <tr><td><kbd>{p.shortcuts.image}</kbd></td><td>Gambar Lokal di dalam topik</td></tr>
+            <tr><td>Sisipkan ▾</td><td>Catatan, Label, Tugas, Tautan, Lampiran, Catatan Audio, Stiker, Ilustrasi, Gambar Lokal, Persamaan</td></tr>
           </tbody></table>
           <h4>Pindah &amp; susun</h4>
           <table className="keytable"><tbody>
@@ -138,9 +152,12 @@ export default function FormatPanel(p: Props) {
             <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td><td>Urungkan (undo)</td></tr>
             <tr><td><kbd>Ctrl</kbd> + <kbd>Y</kbd></td><td>Ulangi (redo)</td></tr>
             <tr><td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></td><td>Ulangi (redo)</td></tr>
-            <tr><td><kbd>Ctrl</kbd> + <kbd>0</kbd></td><td>Pas layar</td></tr>
-            <tr><td><kbd>Ctrl</kbd> + <kbd>+</kbd></td><td>Perbesar</td></tr>
-            <tr><td><kbd>Ctrl</kbd> + <kbd>-</kbd></td><td>Perkecil</td></tr>
+            <tr><td><kbd>{p.shortcuts.zoomIn}</kbd></td><td>Perbesar</td></tr>
+            <tr><td><kbd>{p.shortcuts.zoomOut}</kbd></td><td>Perkecil</td></tr>
+            <tr><td><kbd>{p.shortcuts.actual}</kbd></td><td>Ukuran Sebenarnya (100%)</td></tr>
+            <tr><td><kbd>{p.shortcuts.fit}</kbd></td><td>Pas layar</td></tr>
+            <tr><td><kbd>{p.shortcuts.central}</kbd></td><td>Buka Topik Sentral</td></tr>
+            <tr><td><kbd>{p.shortcuts.zen}</kbd></td><td>Mode ZEN (Esc untuk keluar)</td></tr>
             <tr><td><kbd>?</kbd></td><td>Buka tab Pintasan ini</td></tr>
           </tbody></table>
           <h4>Mouse / sentuh</h4>
@@ -157,6 +174,9 @@ export default function FormatPanel(p: Props) {
             <tr><td><kbd>N</kbd></td><td>Catatan</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Keluar</td></tr>
           </tbody></table>
+          <button className="btn" style={{ width: "100%", marginTop: 12 }} onClick={p.onCustomize}>
+            Sesuaikan Pintasan
+          </button>
         </div>
       )}
 
@@ -170,6 +190,15 @@ export default function FormatPanel(p: Props) {
             <li><b>🎨 Format</b> panel ini: Topik, Peta, Panduan</li>
             <li><b>⬇ Ekspor</b> PDF, PNG, SVG (pilih ukuran &amp; bingkai), format lintas aplikasi, Map It, Markdown</li>
             <li><b>🎬 Presentasi</b> tampil per langkah &amp; ekspor video</li>
+          </ul>
+          <h4>Bilah alat (di bawah bilah atas)</h4>
+          <ul>
+            <li><b>Subtopik</b> tambah anak &nbsp; <b>Ringkasan</b> kurung rangkuman</li>
+            <li><b>Hubungan</b>: pilih topik asal, ketuk Hubungan, lalu ketuk topik tujuan. Ketuk garisnya untuk memberi teks atau menghapus</li>
+            <li><b>Batas</b>: bingkai putus-putus di sekeliling topik terpilih beserta turunannya (ketuk lagi untuk melepas)</li>
+            <li><b>Penanda</b>: bintang, bendera, tanda seru, nomor prioritas, dll.</li>
+            <li><b>Sisipkan ▾</b>: Catatan, Label, Tugas (ketuk ☐ pada topik untuk menandai selesai), Tautan (ketuk 🔗 untuk membuka), Lampiran, Catatan Audio (ketuk 🔊), Stiker, Ilustrasi, Gambar Lokal, Persamaan</li>
+            <li><b>ZEN</b> layar bersih tanpa bilah (Esc untuk keluar) &nbsp; <b>Pusat</b> kembali ke topik sentral</li>
           </ul>
           <h4>Bilah bawah topik</h4>
           <ul>
@@ -237,12 +266,24 @@ export default function FormatPanel(p: Props) {
               <button className={!sel.pattern ? "on" : ""} onClick={() => p.onPatch({ pattern: undefined })} title="Ikuti peta">
                 Ikuti
               </button>
-              {PATTERNS.map((pt) => (
+              {[...PATTERNS, ...SKETCH_PATTERNS].map((pt) => (
                 <button key={pt.id} className={sel.pattern === pt.id ? "on" : ""} onClick={() => p.onPatch({ pattern: pt.id as PatternId })}>
                   {pt.label}
                 </button>
               ))}
             </div>
+          </div>
+          <div className="field">
+            <span>Garis tepi</span>
+            <Seg
+              items={[
+                ["solid", "Penuh"],
+                ["dashed", "Putus-putus"],
+                ["none", "Tanpa tepi"],
+              ]}
+              value={(sel.edge ?? "solid") as string}
+              onPick={(v) => p.onPatch({ edge: v === "solid" ? undefined : (v as "dashed" | "none") })}
+            />
           </div>
           <div className="field">
             <span>Font topik</span>
@@ -359,7 +400,7 @@ export default function FormatPanel(p: Props) {
           <div className="field">
             <span>Arsir semua topik</span>
             <div className="pat-grid">
-              {PATTERNS.map((pt) => (
+              {[...PATTERNS, ...SKETCH_PATTERNS].map((pt) => (
                 <button key={pt.id} className={(sheet.pattern ?? "none") === pt.id ? "on" : ""} onClick={() => p.onSheet((s) => ({ ...s, pattern: pt.id === "none" ? undefined : pt.id }))}>
                   {pt.label}
                 </button>

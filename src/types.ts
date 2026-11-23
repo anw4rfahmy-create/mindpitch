@@ -18,7 +18,7 @@ export type StructureId =
 
 export type LineStyle = "auto" | "curve" | "elbow" | "round" | "straight";
 export type TopicStyle = "auto" | "box" | "pill" | "line" | "none";
-export type PatternId = "none" | "diag" | "diag2" | "cross" | "dots" | "horiz" | "vert";
+export type PatternId = "none" | "diag" | "diag2" | "cross" | "dots" | "horiz" | "vert" | "sk-solid" | "sk-diag" | "sk-diag2" | "sk-cross" | "sk-horiz";
 export type ImgSize = "S" | "M" | "L";
 
 export interface Attachment {
@@ -49,10 +49,27 @@ export interface MNode {
   italic?: boolean;
   textColor?: string;
   pattern?: PatternId;
+  edge?: "solid" | "dashed" | "none"; // gaya garis tepi topik
   /** Bila ada: topik ini adalah Ringkasan (kurung) yang merangkum saudara dari `from` sampai `to`. */
   summary?: { from: string; to: string };
   image?: NodeImage;
   attachments?: Attachment[];
+  markers?: string[]; // penanda (emoji)
+  stickers?: string[]; // stiker / ilustrasi (emoji)
+  labels?: string[];
+  task?: number; // kemajuan tugas 0..100
+  link?: { kind: "web" | "node" | "sheet"; target: string };
+  boundary?: boolean; // batas: bingkai putus-putus di sekeliling topik + turunannya
+  audio?: Attachment; // catatan audio
+  eq?: string; // persamaan
+}
+
+export interface Relation {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+  color?: string;
 }
 
 export interface FloatImage {
@@ -77,7 +94,7 @@ export interface PitchSettings {
   bgImageId?: string;
   bgDim: number; // 0..0.8 lapisan gelap di atas gambar latar
   focus: boolean; // judul di tengah sebelum pindah ke kiri
-  credit: boolean; // tulisan "Dibuat dengan Map It" pada sampul
+  credit: boolean; // tulisan "Dibuat dengan Map It by Anwar" pada sampul
   transition: SlideTransition;
   secondsPerStep: number; // untuk putar otomatis & video
   textScale: number; // 0.8 .. 1.4
@@ -126,6 +143,7 @@ export interface Sheet {
   font: string; // id font global
   bg: MapBg;
   floats: FloatImage[];
+  relations?: Relation[];
   pitch: PitchSettings;
 }
 

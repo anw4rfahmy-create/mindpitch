@@ -89,7 +89,7 @@ export default function Home({ onOpen }: Props) {
     <div className="home">
       <header className="home-head">
         <div>
-          <h1>Map It</h1>
+          <h1>Map It <small className="by">by Anwar</small></h1>
           <p className="muted">Peta pikiran yang bisa langsung jadi presentasi dan video.</p>
         </div>
         <div className="spacer" />

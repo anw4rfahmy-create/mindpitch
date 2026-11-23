@@ -1,5 +1,6 @@
 import { branchIndex } from "./model";
 import { paletteById } from "./themes";
+import { isSketch } from "./sketch";
 import { MNode, NodeShape, PatternId, Sheet, StructureId } from "./types";
 
 export interface NodeStyle {
@@ -11,6 +12,7 @@ export interface NodeStyle {
   branch: string;
   pattern?: Exclude<PatternId, "none">;
   patternColor: string;
+  dash?: string; // pola putus-putus garis tepi
 }
 
 export function contrastText(hex: string): string {
@@ -112,10 +114,18 @@ export function styleFor(sheet: Sheet, n: MNode, depth: number): NodeStyle {
       text = contrastText(fill);
     }
     const dark = contrastText(fill) === "#ffffff";
-    patternColor = dark ? "rgba(255,255,255,0.42)" : stroke === fill || stroke === "none" ? "rgba(0,0,0,0.22)" : hexA(stroke, 0.5);
+    const sk = isSketch(pattern);
+    patternColor = dark
+      ? `rgba(255,255,255,${sk ? 0.55 : 0.42})`
+      : stroke === fill || stroke === "none"
+      ? `rgba(0,0,0,${sk ? 0.3 : 0.22})`
+      : hexA(stroke, sk ? 0.65 : 0.5);
   }
+  let dash: string | undefined;
+  if (n.edge === "none" && shape !== "line") stroke = "none";
+  else if (n.edge === "dashed") dash = "7 5";
   if (n.textColor) text = n.textColor;
-  return { fill, stroke, strokeWidth, text, shape, branch, pattern, patternColor };
+  return { fill, stroke, strokeWidth, text, shape, branch, pattern, patternColor, dash };
 }
 
 export function radiusFor(shape: NodeShape, h: number): number {

@@ -10,10 +10,20 @@ export const PATTERNS: { id: PatternId; label: string }[] = [
   { id: "vert", label: "Garis ║" },
 ];
 
+/** Arsir gaya sketsa tangan (isi coretan + tepi bergoyang). */
+export const SKETCH_PATTERNS: { id: PatternId; label: string }[] = [
+  { id: "sk-solid", label: "Sketsa polos" },
+  { id: "sk-diag", label: "Sketsa ╱" },
+  { id: "sk-diag2", label: "Sketsa ╲" },
+  { id: "sk-cross", label: "Sketsa ✕" },
+  { id: "sk-horiz", label: "Sketsa ═" },
+];
+
+export type RegularPattern = "diag" | "diag2" | "cross" | "dots" | "horiz" | "vert";
 const S = 8;
 
 /** Isi SVG (sel 8×8) untuk satu pola. */
-export function patternInner(kind: Exclude<PatternId, "none">, color: string): string {
+export function patternInner(kind: RegularPattern, color: string): string {
   const st = `stroke="${color}" stroke-width="1.3" fill="none" stroke-linecap="square"`;
   switch (kind) {
     case "diag":
@@ -33,13 +43,13 @@ export function patternInner(kind: Exclude<PatternId, "none">, color: string): s
 
 export const patternId = (kind: string, color: string) => "pt-" + kind + "-" + color.replace(/[^a-z0-9]/gi, "");
 
-export const patternDef = (kind: Exclude<PatternId, "none">, color: string) =>
+export const patternDef = (kind: RegularPattern, color: string) =>
   `<pattern id="${patternId(kind, color)}" width="${S}" height="${S}" patternUnits="userSpaceOnUse">${patternInner(kind, color)}</pattern>`;
 
 const cache = new Map<string, CanvasPattern>();
 
 /** Pola untuk kanvas 2D (ekspor PNG/PDF). */
-export function canvasPattern(ctx: CanvasRenderingContext2D, kind: Exclude<PatternId, "none">, color: string): CanvasPattern | null {
+export function canvasPattern(ctx: CanvasRenderingContext2D, kind: RegularPattern, color: string): CanvasPattern | null {
   const key = kind + color;
   const hit = cache.get(key);
   if (hit) return hit;

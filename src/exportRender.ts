@@ -1,8 +1,10 @@
+import { boundaryRects, CHIP_FONT, CHIP_H, EQ_FONT, GLYPH_FONT, relationGeoms } from "./deco";
 // Penggambar ekspor: satu halaman (PNG/PDF/SVG) dengan ukuran, bingkai, dan judul pilihan.
 import { computeLayout, LayoutResult } from "./layout";
 import { edgeWidth, radiusFor, styleFor } from "./nodeStyle";
 import { familyCss } from "./fonts";
-import { canvasPattern, patternDef } from "./patterns";
+import { canvasPattern, patternDef, RegularPattern } from "./patterns";
+import { isSketch, sketchGeom } from "./sketch";
 import { fileDataUrl, loadImage } from "./files";
 import { Sheet } from "./types";
 import { drawTable, ensureTableFonts, tableSvg } from "./table";
@@ -205,6 +207,20 @@ export async function drawContent(ctx: CanvasRenderingContext2D, sheet: Sheet, l
   }
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  for (const b of boundaryRects(sheet, lay)) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(b.x, b.y, b.w, b.h, 16);
+    ctx.globalAlpha = 0.07;
+    ctx.fillStyle = b.color;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([7, 5]);
+    ctx.stroke();
+    ctx.restore();
+  }
   for (const e of lay.edges) {
     const owner = lay.nodes[e.childId];
     ctx.strokeStyle = e.kind === "axis" ? "#334155" : styleFor(sheet, sheet.nodes[e.childId], owner.depth).branch;
@@ -229,13 +245,38 @@ export async function drawContent(ctx: CanvasRenderingContext2D, sheet: Sheet, l
         if (st.shape === "ellipse") ctx.ellipse(ln.w / 2, ln.h / 2, ln.w / 2, ln.h / 2, 0, 0, Math.PI * 2);
         else ctx.roundRect(0, 0, ln.w, ln.h, radiusFor(st.shape, ln.h));
       };
+      if (st.pattern && isSketch(st.pattern)) {
+        const g = sketchGeom(id, st.pattern, st.shape, ln.w, ln.h, radiusFor(st.shape, ln.h));
+        const fp = new Path2D(g.fill);
+        ctx.fillStyle = st.fill;
+        ctx.fill(fp);
+        if (g.hatch) {
+          ctx.save();
+          ctx.clip(fp);
+          ctx.strokeStyle = st.patternColor;
+          ctx.lineWidth = 1.8;
+          ctx.lineCap = "round";
+          ctx.stroke(new Path2D(g.hatch));
+          ctx.restore();
+        }
+        if (st.stroke !== "none") {
+          ctx.strokeStyle = st.stroke;
+          if (st.dash) ctx.setLineDash([7, 5]);
+          ctx.lineWidth = st.strokeWidth;
+          ctx.stroke(new Path2D(g.outline));
+          ctx.globalAlpha = 0.75;
+          ctx.lineWidth = Math.max(1, st.strokeWidth * 0.7);
+          ctx.stroke(new Path2D(g.outline2));
+          ctx.setLineDash([]);
+        }
+      } else {
       shapePath();
       if (st.fill !== "none") {
         ctx.fillStyle = st.fill;
         ctx.fill();
       }
       if (st.pattern) {
-        const pat = canvasPattern(ctx, st.pattern, st.patternColor);
+        const pat = canvasPattern(ctx, st.pattern as RegularPattern, st.patternColor);
         if (pat) {
           ctx.save();
           shapePath();
@@ -250,7 +291,10 @@ export async function drawContent(ctx: CanvasRenderingContext2D, sheet: Sheet, l
         shapePath();
         ctx.strokeStyle = st.stroke;
         ctx.lineWidth = st.strokeWidth;
+        if (st.dash) ctx.setLineDash([7, 5]);
         ctx.stroke();
+        ctx.setLineDash([]);
+      }
       }
     }
     if (ln.img) {
@@ -263,6 +307,49 @@ export async function drawContent(ctx: CanvasRenderingContext2D, sheet: Sheet, l
     ctx.textBaseline = "middle";
     ctx.direction = ln.rtl ? "rtl" : "ltr";
     ln.lines.forEach((l, i) => ctx.fillText(l, ln.w / 2, ln.textTop + ln.lineH * (i + 0.5)));
+    if (ln.deco) {
+      ctx.direction = "ltr";
+      ctx.font = GLYPH_FONT;
+      ctx.fillStyle = "#0f172a";
+      for (const g of ln.deco.glyphs) ctx.fillText(g.text, g.x, ln.deco.glyphY);
+      for (const c of ln.deco.chips) {
+        ctx.beginPath();
+        ctx.roundRect(c.x, ln.deco.chipsY - CHIP_H / 2, c.w, CHIP_H, CHIP_H / 2);
+        ctx.fillStyle = "rgba(255,255,255,.92)";
+        ctx.fill();
+        ctx.strokeStyle = "#94a3b8";
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.fillStyle = "#334155";
+        ctx.font = CHIP_FONT;
+        ctx.fillText(c.text, c.x + c.w / 2, ln.deco.chipsY);
+      }
+      if (ln.deco.eq) {
+        ctx.fillStyle = st.text;
+        ctx.font = EQ_FONT;
+        ctx.fillText(ln.deco.eq, ln.w / 2, ln.deco.eqY);
+      }
+    }
+    ctx.restore();
+  }
+  for (const r of relationGeoms(sheet, lay)) {
+    ctx.save();
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 4]);
+    ctx.stroke(new Path2D(r.d));
+    ctx.setLineDash([]);
+    ctx.stroke(new Path2D(r.arrow));
+    if (r.label) {
+      ctx.font = "600 12px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#fff";
+      ctx.strokeText(r.label, r.lx, r.ly);
+      ctx.fillStyle = r.color;
+      ctx.fillText(r.label, r.lx, r.ly);
+    }
     ctx.restore();
   }
   for (const id of lay.order) {
@@ -370,7 +457,7 @@ export async function renderSvg(sheet: Sheet, o: ExportOpts, title?: string): Pr
   const defs = new Map<string, string>();
   for (const id of lay.order) {
     const st = styleFor(sheet, sheet.nodes[id], lay.nodes[id].depth);
-    if (st.pattern) defs.set(st.pattern + st.patternColor, patternDef(st.pattern, st.patternColor));
+    if (st.pattern && !isSketch(st.pattern)) defs.set(st.pattern + st.patternColor, patternDef(st.pattern as RegularPattern, st.patternColor));
   }
   P.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>${[...defs.values()].join("")}</defs>`);
   if (!(o.format === "png" && o.transparent)) P.push(`<rect width="${W}" height="${H}" fill="${sheet.bg.color}"/>`);
@@ -388,6 +475,8 @@ export async function renderSvg(sheet: Sheet, o: ExportOpts, title?: string): Pr
     const u = await fileDataUrl(f.fileId);
     if (u) P.push(`<image href="${u}" x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" preserveAspectRatio="none"/>`);
   }
+  for (const b of boundaryRects(sheet, lay))
+    P.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="16" fill="${b.color}" fill-opacity="0.07" stroke="${b.color}" stroke-width="1.6" stroke-dasharray="7 5"/>`);
   for (const e of lay.edges) {
     const owner = lay.nodes[e.childId];
     const col = e.kind === "axis" ? "#334155" : styleFor(sheet, sheet.nodes[e.childId], owner.depth).branch;
@@ -404,10 +493,18 @@ export async function renderSvg(sheet: Sheet, o: ExportOpts, title?: string): Pr
         ? `<ellipse cx="${ln.w / 2}" cy="${ln.h / 2}" rx="${ln.w / 2}" ry="${ln.h / 2}" ${extra}/>`
         : `<rect width="${ln.w}" height="${ln.h}" rx="${radiusFor(st.shape, ln.h)}" ${extra}/>`;
     if (st.shape === "line") P.push(`<line x1="0" y1="${ln.h}" x2="${ln.w}" y2="${ln.h}" stroke="${st.stroke}" stroke-width="${st.strokeWidth}" stroke-linecap="round"/>`);
-    else if (st.shape !== "none") {
+    else if (st.shape !== "none" && st.pattern && isSketch(st.pattern)) {
+      const g = sketchGeom(id, st.pattern, st.shape, ln.w, ln.h, radiusFor(st.shape, ln.h));
+      const cid = "skc-" + id.replace(/[^a-z0-9]/gi, "");
+      P.push(`<path d="${g.fill}" fill="${st.fill}"/>`);
+      if (g.hatch) P.push(`<clipPath id="${cid}"><path d="${g.fill}"/></clipPath><path d="${g.hatch}" clip-path="url(#${cid})" fill="none" stroke="${st.patternColor}" stroke-width="1.8" stroke-linecap="round"/>`);
+      const da = st.dash ? ` stroke-dasharray="${st.dash}"` : "";
+      if (st.stroke !== "none")
+        P.push(`<path d="${g.outline}" fill="none" stroke="${st.stroke}" stroke-width="${st.strokeWidth}"${da}/><path d="${g.outline2}" fill="none" stroke="${st.stroke}" stroke-width="${Math.max(1, st.strokeWidth * 0.7)}" opacity="0.75"${da}/>`);
+    } else if (st.shape !== "none") {
       P.push(shapeEl(`fill="${st.fill}"`));
-      if (st.pattern) P.push(shapeEl(`fill="url(#pt-${st.pattern}-${st.patternColor.replace(/[^a-z0-9]/gi, "")})"`));
-      P.push(shapeEl(`fill="none" stroke="${st.stroke}" stroke-width="${st.strokeWidth}"`));
+      if (st.pattern && !isSketch(st.pattern)) P.push(shapeEl(`fill="url(#pt-${st.pattern}-${st.patternColor.replace(/[^a-z0-9]/gi, "")})"`));
+      P.push(shapeEl(`fill="none" stroke="${st.stroke}" stroke-width="${st.strokeWidth}"${st.dash ? ` stroke-dasharray="${st.dash}"` : ""}`));
     }
     if (ln.img) {
       const u = await fileDataUrl(ln.img.fileId);
@@ -420,7 +517,17 @@ export async function renderSvg(sheet: Sheet, o: ExportOpts, title?: string): Pr
         `<text x="${ln.w / 2}" y="${ln.textTop + ln.lineH * (i + 0.5)}" text-anchor="middle" dominant-baseline="central" direction="${ln.rtl ? "rtl" : "ltr"}" fill="${st.text}" font-family="${fam}" font-size="${ln.fontSize}" font-weight="${weight}"${n.italic ? ' font-style="italic"' : ""}>${esc(l)}</text>`
       )
     );
+    if (ln.deco) {
+      for (const g of ln.deco.glyphs) P.push(`<text x="${g.x}" y="${ln.deco.glyphY}" text-anchor="middle" dominant-baseline="central" font-size="15">${esc(g.text)}</text>`);
+      for (const c of ln.deco.chips)
+        P.push(`<rect x="${c.x}" y="${ln.deco.chipsY - CHIP_H / 2}" width="${c.w}" height="${CHIP_H}" rx="${CHIP_H / 2}" fill="#fff" fill-opacity=".92" stroke="#94a3b8" stroke-width=".8"/><text x="${c.x + c.w / 2}" y="${ln.deco.chipsY}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="600" fill="#334155" font-family="system-ui,sans-serif">${esc(c.text)}</text>`);
+      if (ln.deco.eq) P.push(`<text x="${ln.w / 2}" y="${ln.deco.eqY}" text-anchor="middle" dominant-baseline="central" font-size="15" font-style="italic" font-family="'Times New Roman',serif" fill="${st.text}">${esc(ln.deco.eq)}</text>`);
+    }
     P.push(`</g>`);
+  }
+  for (const r of relationGeoms(sheet, lay)) {
+    P.push(`<path d="${r.d}" fill="none" stroke="${r.color}" stroke-width="2" stroke-dasharray="7 4" stroke-linecap="round"/><path d="${r.arrow}" fill="none" stroke="${r.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`);
+    if (r.label) P.push(`<text x="${r.lx}" y="${r.ly}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="${r.color}" stroke="#fff" stroke-width="4" paint-order="stroke" font-family="system-ui,sans-serif">${esc(r.label)}</text>`);
   }
   }
   P.push(`</g></svg>`);
@@ -436,7 +543,7 @@ export interface PdfPage {
   ptH: number;
 }
 
-export function buildPdf(pages: PdfPage[], title = "Map It"): Blob {
+export function buildPdf(pages: PdfPage[], title = "Map It by Anwar"): Blob {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
   const offsets: number[] = [];
@@ -473,7 +580,7 @@ export function buildPdf(pages: PdfPage[], title = "Map It"): Blob {
   });
   const infoN = nObj;
   begin(infoN);
-  push(`<< /Title (${title.replace(/[()\\]/g, "").replace(/[^\x20-\x7E]/g, "?")}) /Producer (Map It) >>\nendobj\n`);
+  push(`<< /Title (${title.replace(/[()\\]/g, "").replace(/[^\x20-\x7E]/g, "?")}) /Producer (Map It by Anwar) >>\nendobj\n`);
   const xref = pos;
   push(`xref\n0 ${nObj + 1}\n0000000000 65535 f \n`);
   for (let i = 1; i <= nObj; i++) push(String(offsets[i]).padStart(10, "0") + " 00000 n \n");

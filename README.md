@@ -1,4 +1,4 @@
-# Map It (v2)
+# Map It by Anwar (v2)
 
 Aplikasi PWA peta pikiran dengan **Presentasi** (tampil per langkah & video). Berjalan offline, data tersimpan di perangkat (IndexedDB).
 
@@ -25,6 +25,8 @@ Untuk dipasang di ponsel, sajikan folder `dist/` lewat HTTPS (Netlify, Vercel, G
 - **Format lintas aplikasi**: buka berkas peta pikiran dari aplikasi lain (`.xmind`) dan ekspor agar terbuka di aplikasi serupa (struktur, catatan, status lipat; gaya/gambar/lampiran tidak ikut).
 - **Arsir** pada topik/subtopik (diagonal, silang, titik, garis) per topik atau semua.
 - **Multi-pilih** subtopik (Shift/Ctrl-klik, tombol ☑, atau ⫴ Saudara) untuk mengubah gaya sekaligus.
+- **Arsir sketsa**: isi berarsir tangan + garis tepi bergoyang (Format › Topik › Arsir › "Sketsa ...").
+- **Bilah alat**: Subtopik, Hubungan (panah antar topik), Ringkasan, Batas (bingkai putus-putus), Penanda, Sisipkan (Catatan, Label, Tugas, Tautan, Lampiran, Catatan Audio, Stiker, Ilustrasi, Gambar Lokal, Persamaan), ZEN, Pusat. Semua pintasannya bisa diubah lewat tab Pintasan › Sesuaikan Pintasan.
 - **Ringkasan (Summary)**: pilih beberapa topik bersaudara (☑ / Shift-klik), tekan ⎬ Ringkasan atau Ctrl+]; muncul kurung + topik ringkasan yang bisa diedit/digaya. Ikut tampil di ekspor.
 - **Lembar Tabel** (mis. untuk tashrif): tombol ＋ lembar › Tabel kosong / Tashrif istilahi / Tashrif lughawi. Sel Arab (font Amiri dll.), arah kanan→kiri, tempel dari Word/Excel, sisip/hapus baris & kolom, warna/tebal/rata, header, ekspor PDF/PNG/SVG/Markdown, seret batas kolom untuk mengatur lebar (tetap tepi ke tepi), dan **Tampilkan bertahap** (per baris, per kolom, per sel → atau ↓, atau ketuk sel untuk memunculkan).
 - **Peta → Tabel**: di panel Format › tab Peta › "Ubah menjadi tabel" (per tingkat atau per cabang); peta asli tetap ada.

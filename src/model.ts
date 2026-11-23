@@ -81,7 +81,7 @@ export function sampleWorkbook(): Workbook {
   ]);
 
   const now = Date.now();
-  return { id: uid(), title: "Contoh Map It", sheets: [a, b, c], activeId: a.id, createdAt: now, updatedAt: now };
+  return { id: uid(), title: "Contoh Map It by Anwar", sheets: [a, b, c], activeId: a.id, createdAt: now, updatedAt: now };
 }
 
 export const activeSheet = (wb: Workbook): Sheet => wb.sheets.find((s) => s.id === wb.activeId) ?? wb.sheets[0];
@@ -279,6 +279,7 @@ export function usedFileIds(wb: Workbook): Set<string> {
       const n = s.nodes[id];
       if (n.image) used.add(n.image.fileId);
       n.attachments?.forEach((a) => used.add(a.id));
+      if (n.audio) used.add(n.audio.id);
     }
   }
   return used;

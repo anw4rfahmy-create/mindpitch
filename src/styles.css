@@ -1259,3 +1259,43 @@ kbd {
 .tbl-wrap .tbl tr { position: relative; }
 .tbl-wrap .tbl th.tbl-gut { position: absolute; top: 0; bottom: 0; width: 34px; inset-inline-start: -34px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
 .tbl-wrap .tbl thead th.tbl-h:not(.tbl-gut) { position: relative; }
+
+.home-head h1 .by{font-size:.4em;font-weight:500;color:var(--muted,#64748b);letter-spacing:.02em;margin-left:.3em}
+
+/* ---------- ribbon, menu, dialog sisip ---------- */
+.ribbon { display: flex; gap: 2px; padding: 4px 8px; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+.ribbon::-webkit-scrollbar { display: none; }
+.rb { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 62px; padding: 4px 8px; border: 0; background: transparent; border-radius: 8px; color: var(--text); font: inherit; font-size: 11.5px; cursor: pointer; flex-shrink: 0; }
+.rb .ic { font-size: 18px; line-height: 22px; }
+.rb:hover:not(:disabled) { background: var(--accent-soft); }
+.rb.on { background: var(--accent-soft); color: var(--accent); }
+.rb:disabled { opacity: 0.4; cursor: default; }
+.rb-sep { width: 1px; background: var(--line); margin: 4px 4px; flex-shrink: 0; }
+.menu-pop { position: fixed; z-index: 70; min-width: 210px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; max-height: 70vh; overflow: auto; }
+.menu-pop button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; background: transparent; border-radius: 6px; font: inherit; font-size: 14px; text-align: left; cursor: pointer; color: var(--text); }
+.menu-pop button:hover { background: var(--accent-soft); }
+.menu-pop button .ic { width: 22px; text-align: center; font-size: 16px; }
+.menu-pop button .kb { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+.menu-pop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.small-modal { width: min(440px, 100%); }
+.small-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.small-body .txt { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--panel); color: var(--text); }
+.note-input.big { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+.dlg-foot { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.task-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.eq-preview { padding: 12px; border: 1px dashed var(--line); border-radius: 8px; font: italic 20px "Times New Roman", serif; text-align: center; min-height: 48px; }
+.pick-grid h5 { margin: 6px 0 4px; font-size: 12px; color: var(--muted); }
+.emojis { display: flex; flex-wrap: wrap; gap: 4px; }
+.emo { width: 38px; height: 38px; font-size: 20px; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; cursor: pointer; }
+.emo.big { width: 46px; height: 46px; font-size: 26px; }
+.emo.on { background: var(--accent-soft); border-color: var(--accent); }
+.zen-exit { position: fixed; top: 10px; right: 10px; z-index: 50; opacity: 0.35; }
+.zen-exit:hover { opacity: 1; }
+.pick-banner { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 999px; font-size: 13px; z-index: 12; box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; }
+.pick-banner button { background: rgba(255,255,255,.25); border: 0; color: #fff; border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+.sc-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.sc-row .lbl { flex: 1; }
+.sc-row kbd { min-width: 90px; text-align: center; }
+.sc-row.cap kbd { outline: 2px solid var(--accent); }
+@media (max-width: 720px) { .rb { min-width: 54px; padding: 4px 6px; } }
+.editor.zen > .topbar, .editor.zen .ribbon, .editor.zen .actionbar, .editor.zen .sheetbar, .editor.zen .side, .editor.zen .zoom-box { display: none !important; }

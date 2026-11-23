@@ -9,6 +9,9 @@ import { importFile as importAny } from "./exporters";
 import SheetBar from "./SheetBar";
 import FormatPanel from "./FormatPanel";
 import AttachmentViewer from "./AttachmentViewer";
+import InsertDialog, { InsertKind } from "./InsertDialogs";
+import ShortcutsDialog from "./ShortcutsDialog";
+import { comboOf, findAction, loadShortcuts, saveShortcuts } from "./shortcuts";
 import { computeLayout } from "./layout";
 import {
   activeSheet,
@@ -57,6 +60,14 @@ export default function Editor({ initial, onBack }: Props) {
   const [attachFor, setAttachFor] = useState<string | null>(null);
   const [focusToken, setFocusToken] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [insertKind, setInsertKind] = useState<InsertKind | null>(null);
+  const [relFrom, setRelFrom] = useState<string | null>(null);
+  const [selRel, setSelRel] = useState<string | null>(null);
+  const [relEdit, setRelEdit] = useState(false);
+  const [zen, setZen] = useState(false);
+  const [menu, setMenu] = useState<{ kind: "ins" | "link"; x: number; y: number } | null>(null);
+  const [scMap, setScMap] = useState(loadShortcuts);
+  const [showSc, setShowSc] = useState(false);
   const canvas = useRef<CanvasHandle>(null);
   const imgInput = useRef<HTMLInputElement>(null);
   const floatInput = useRef<HTMLInputElement>(null);
@@ -191,6 +202,18 @@ export default function Editor({ initial, onBack }: Props) {
   };
 
   const selectNode = (id: string | null, additive?: boolean) => {
+    if (relFrom && id) {
+      if (id !== relFrom) {
+        const rid = uid();
+        applySheet((sh) => ({ ...sh, relations: [...(sh.relations ?? []), { id: rid, from: relFrom, to: id }] }));
+        setSelRel(rid);
+        setSelectedId(null);
+        say("Hubungan dibuat. Ketuk garisnya untuk memberi teks atau menghapus.");
+      }
+      setRelFrom(null);
+      return;
+    }
+    setSelRel(null);
     if (!id) {
       setSelectedId(null);
       setMulti([]);
@@ -204,6 +227,39 @@ export default function Editor({ initial, onBack }: Props) {
     } else {
       setSelectedId(id);
       setMulti([]);
+    }
+  };
+  const startRelation = () => {
+    if (!selectedId) return say("Pilih topik asal dulu, lalu ketuk Hubungan");
+    setRelFrom(selectedId);
+    setSelRel(null);
+  };
+  const toggleBoundary = () => {
+    if (!targets.length) return say("Pilih topik yang ingin dibatasi");
+    const on = targets.every((t) => sheet.nodes[t]?.boundary);
+    patchSel({ boundary: on ? undefined : true });
+  };
+  const openInsert = (k: InsertKind) => {
+    setMenu(null);
+    if (k !== "marker" && !sel) return say("Pilih topik dulu");
+    if (k === "marker" && !sel) return say("Pilih topik dulu");
+    setInsertKind(k);
+  };
+  const onDeco = (id: string, kind: string) => {
+    const n = sheet.nodes[id];
+    if (!n) return;
+    setSelectedId(id);
+    if (kind === "task") setNodes((m) => updateNode(m, id, { task: (n.task ?? 0) >= 100 ? 0 : 100 }));
+    else if (kind === "audio") setInsertKind("audio");
+    else if (kind === "link" && n.link) {
+      if (n.link.kind === "web") window.open(n.link.target, "_blank", "noopener");
+      else if (n.link.kind === "node") {
+        if (sheet.nodes[n.link.target]) {
+          setSelectedId(n.link.target);
+          canvas.current?.focusNode(n.link.target);
+        } else say("Topik tujuan sudah dihapus");
+      } else if (docRef.current.sheets.some((x) => x.id === n.link!.target)) selectSheet(n.link.target);
+      else say("Lembar tujuan sudah dihapus");
     }
   };
   const makeSummary = () => {
@@ -388,14 +444,53 @@ export default function Editor({ initial, onBack }: Props) {
     [layout, selectedId]
   );
 
+  const runAction = (act: string) => {
+    switch (act) {
+      case "relation":
+        return startRelation();
+      case "boundary":
+        return toggleBoundary();
+      case "marker":
+        return openInsert("marker");
+      case "link":
+        return openInsert("link");
+      case "note":
+        return openInsert("note");
+      case "label":
+        return openInsert("label");
+      case "task":
+        return openInsert("task");
+      case "image":
+        return sel ? imgInput.current?.click() : say("Pilih topik dulu");
+      case "summary":
+        return makeSummary();
+      case "zoomIn":
+        return canvas.current?.zoomBy(1.2);
+      case "zoomOut":
+        return canvas.current?.zoomBy(1 / 1.2);
+      case "actual":
+        return canvas.current?.actual();
+      case "fit":
+        return canvas.current?.fit();
+      case "central":
+        setSelectedId(sheet.rootId);
+        setMulti([]);
+        return canvas.current?.focusNode(sheet.rootId);
+      case "zen":
+        return setZen((z) => !z);
+    }
+  };
+  const runRef = useRef(runAction);
+  runRef.current = runAction;
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (showPitch || editingId || attachFor) return;
+      if (showPitch || editingId || attachFor || insertKind || showSc) return;
       const t = e.target as HTMLElement;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key;
-      if (mod && k.toLowerCase() === "z") {
+      if (mod && !e.altKey && k.toLowerCase() === "z") {
         e.preventDefault();
         e.shiftKey ? redo() : undo();
         return;
@@ -405,25 +500,13 @@ export default function Editor({ initial, onBack }: Props) {
         redo();
         return;
       }
-      if (mod && k === "0") {
-        e.preventDefault();
-        canvas.current?.fit();
-        return;
-      }
-      if (mod && (k === "=" || k === "+")) {
-        e.preventDefault();
-        canvas.current?.zoomBy(1.2);
-        return;
-      }
-      if (mod && k === "-") {
-        e.preventDefault();
-        canvas.current?.zoomBy(1 / 1.2);
-        return;
-      }
-      if (mod && k === "]") {
-        e.preventDefault();
-        makeSummary();
-        return;
+      if (mod || (e.altKey && /^F\d+$/.test(k)) || /^F\d+$/.test(k)) {
+        const act = findAction(scMap, comboOf(e));
+        if (act) {
+          e.preventDefault();
+          runRef.current(act);
+          return;
+        }
       }
       if (mod) return;
       if (k === "?" || (k === "/" && e.shiftKey)) {
@@ -437,6 +520,17 @@ export default function Editor({ initial, onBack }: Props) {
         applySheet((s) => ({ ...s, floats: s.floats.filter((f) => f.id !== selFloat) }));
         setSelFloat(null);
         return;
+      }
+      if (selRel && (k === "Delete" || k === "Backspace")) {
+        e.preventDefault();
+        applySheet((sh) => ({ ...sh, relations: (sh.relations ?? []).filter((r) => r.id !== selRel) }));
+        setSelRel(null);
+        return;
+      }
+      if (k === "Escape") {
+        if (zen) setZen(false);
+        if (relFrom) setRelFrom(null);
+        setSelRel(null);
       }
       if (!selectedId) return;
       if (e.altKey) {
@@ -492,7 +586,7 @@ export default function Editor({ initial, onBack }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showPitch, editingId, attachFor, selectedId, selFloat, multi, makeSummary, applySheet, setNodes, undo, redo, addChildOf, addSiblingOf, deleteNode, toggleCollapse, navigate]);
+  }, [showPitch, editingId, attachFor, insertKind, showSc, scMap, selRel, relFrom, zen, sel, selectedId, selFloat, multi, makeSummary, applySheet, setNodes, undo, redo, addChildOf, addSiblingOf, deleteNode, toggleCollapse, navigate]);
 
   const [title, setTitle] = useState(doc.title);
   useEffect(() => setTitle(doc.title), [doc.title]);
@@ -507,7 +601,7 @@ export default function Editor({ initial, onBack }: Props) {
   const attachNode = attachFor ? sheet.nodes[attachFor] : null;
 
   return (
-    <div className="editor">
+    <div className={"editor" + (zen ? " zen" : "")}>
       <header className="topbar">
         <button className="btn icon" onClick={onBack} aria-label="Kembali">
           ←
@@ -543,6 +637,42 @@ export default function Editor({ initial, onBack }: Props) {
           {sheet.table ? "▶ Presentasi" : "🎬 Presentasi"}
         </button>
       </header>
+
+      {!sheet.table && (
+        <div className="ribbon" role="toolbar" aria-label="Alat topik">
+          <button className="rb" disabled={!sel || !!sel.summary} onClick={() => sel && addChildOf(sel.id)} title="Subtopik (Tab)">
+            <span className="ic">⊢</span>Subtopik
+          </button>
+          <button className={"rb" + (relFrom ? " on" : "")} onClick={() => (relFrom ? setRelFrom(null) : startRelation())} title={`Hubungan (${scMap.relation})`}>
+            <span className="ic">↷</span>Hubungan
+          </button>
+          <button className="rb" disabled={!sel || !sel.parentId} onClick={makeSummary} title={`Ringkasan (${scMap.summary})`}>
+            <span className="ic">⎬</span>Ringkasan
+          </button>
+          <button className={"rb" + (sel?.boundary ? " on" : "")} disabled={!sel} onClick={toggleBoundary} title={`Batas (${scMap.boundary})`}>
+            <span className="ic">▢</span>Batas
+          </button>
+          <button className="rb" disabled={!sel} onClick={() => openInsert("marker")} title={`Penanda (${scMap.marker})`}>
+            <span className="ic">☆</span>Penanda
+          </button>
+          <button
+            className={"rb" + (menu ? " on" : "")}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenu(menu ? null : { kind: "ins", x: r.left, y: r.bottom + 4 });
+            }}
+          >
+            <span className="ic">＋ ▾</span>Sisipkan
+          </button>
+          <div className="rb-sep" />
+          <button className="rb" onClick={() => setZen(true)} title={`Mode ZEN (${scMap.zen})`}>
+            <span className="ic">⛶</span>ZEN
+          </button>
+          <button className="rb" onClick={() => canvas.current?.focusNode(sheet.rootId)} title={`Buka Topik Sentral (${scMap.central})`}>
+            <span className="ic">◎</span>Pusat
+          </button>
+        </div>
+      )}
 
       <div className="workspace">
         {showOutline && !sheet.table && (
@@ -599,7 +729,28 @@ export default function Editor({ initial, onBack }: Props) {
               onToggleCollapse={toggleCollapse}
               onFloatChange={floatChange}
               onOpenAttachments={setAttachFor}
+              selRel={selRel}
+              onSelectRel={(id) => {
+                setSelRel(id);
+                setSelectedId(null);
+                setMulti([]);
+              }}
+              onDeco={onDeco}
+              pickMode={!!relFrom}
             />
+            {relFrom && (
+              <div className="pick-banner">
+                Ketuk topik tujuan hubungan
+                <button onClick={() => setRelFrom(null)}>Batal</button>
+              </div>
+            )}
+            {selRel && (
+              <div className="pick-banner">
+                Hubungan
+                <button onClick={() => setRelEdit(true)}>Teks</button>
+                <button onClick={() => (applySheet((sh) => ({ ...sh, relations: (sh.relations ?? []).filter((r) => r.id !== selRel) })), setSelRel(null))}>Hapus</button>
+              </div>
+            )}
 
             <div className="zoom-box">
               <button className="btn icon" onClick={() => canvas.current?.zoomBy(1.25)} aria-label="Perbesar">
@@ -686,6 +837,8 @@ export default function Editor({ initial, onBack }: Props) {
             onOpenAttach={() => sel && setAttachFor(sel.id)}
             onAttachFiles={(f) => sel && addAttachments(sel.id, f)}
             onClose={() => setShowFormat(false)}
+            shortcuts={scMap}
+            onCustomize={() => setShowSc(true)}
           />
         )}
       </div>
@@ -705,6 +858,59 @@ export default function Editor({ initial, onBack }: Props) {
         />
       ))}
 
+      {menu && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 69 }} onPointerDown={() => setMenu(null)} />
+          <div className="menu-pop" style={{ left: Math.min(menu.x, window.innerWidth - 230), top: menu.y }}>
+            {menu.kind === "ins" && (
+              <>
+                <button onClick={() => openInsert("note")}><span className="ic">📝</span>Catatan<span className="kb">{scMap.note}</span></button>
+                <button onClick={() => openInsert("label")}><span className="ic">🏷</span>Label<span className="kb">{scMap.label}</span></button>
+                <button onClick={() => openInsert("task")}><span className="ic">☑</span>Tugas<span className="kb">{scMap.task}</span></button>
+                <button onClick={() => openInsert("link")}><span className="ic">🔗</span>Tautan<span className="kb">{scMap.link}</span></button>
+                <hr />
+                <button onClick={() => (setMenu(null), sel ? setAttachFor(sel.id) : say("Pilih topik dulu"))}><span className="ic">📎</span>Lampiran</button>
+                <button onClick={() => openInsert("audio")}><span className="ic">🎙</span>Catatan Audio</button>
+                <hr />
+                <button onClick={() => openInsert("sticker")}><span className="ic">😀</span>Stiker</button>
+                <button onClick={() => openInsert("illus")}><span className="ic">🖼</span>Ilustrasi</button>
+                <button onClick={() => (setMenu(null), sel ? imgInput.current?.click() : say("Pilih topik dulu"))}><span className="ic">🏞</span>Gambar Lokal<span className="kb">{scMap.image}</span></button>
+                <button onClick={() => openInsert("eq")}><span className="ic">∑</span>Persamaan</button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+      {insertKind && (
+        <InsertDialog
+          kind={insertKind}
+          node={sel}
+          sheet={sheet}
+          doc={doc}
+          docId={doc.id}
+          onPatch={patchSel}
+          onClose={() => setInsertKind(null)}
+        />
+      )}
+      {relEdit && selRel && (
+        <InsertDialog
+          kind="relLabel"
+          node={null}
+          sheet={sheet}
+          doc={doc}
+          docId={doc.id}
+          relLabel={(sheet.relations ?? []).find((r) => r.id === selRel)?.label}
+          onPatch={() => {}}
+          onRelLabel={(t) => applySheet((sh) => ({ ...sh, relations: (sh.relations ?? []).map((r) => (r.id === selRel ? { ...r, label: t || undefined } : r)) }))}
+          onClose={() => setRelEdit(false)}
+        />
+      )}
+      {showSc && <ShortcutsDialog map={scMap} onChange={(m) => (setScMap(m), saveShortcuts(m))} onClose={() => setShowSc(false)} />}
+      {zen && (
+        <button className="btn zen-exit" onClick={() => setZen(false)}>
+          ✕ Keluar ZEN
+        </button>
+      )}
       {attachFor && attachNode && (
         <AttachmentViewer
           title={attachNode.text.split("\n")[0].slice(0, 40)}

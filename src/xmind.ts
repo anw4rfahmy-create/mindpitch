@@ -59,7 +59,7 @@ export function toXmind(wb: Workbook): Blob {
   }));
   const files = {
     "content.json": strToU8(JSON.stringify(content)),
-    "metadata.json": strToU8(JSON.stringify({ creator: { name: "Map It", version: "2.0" } })),
+    "metadata.json": strToU8(JSON.stringify({ creator: { name: "Map It by Anwar", version: "2.0" } })),
     "manifest.json": strToU8(JSON.stringify({ "file-entries": { "content.json": {}, "metadata.json": {} } })),
   };
   return new Blob([zipSync(files, { level: 6 }) as BlobPart], { type: "application/vnd.xmind.workbook" });
