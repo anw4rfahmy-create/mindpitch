@@ -4,7 +4,8 @@ import Outline from "./Outline";
 import PitchPanel from "./PitchPanel";
 import TableEditor from "./TableEditor";
 import TablePresenter from "./TablePresenter";
-import { TABLE_TEMPLATES, TableTemplate } from "./table";
+import { TABLE_TEMPLATES, TableTemplate, mapToTable } from "./table";
+import { importFile as importAny } from "./exporters";
 import SheetBar from "./SheetBar";
 import FormatPanel from "./FormatPanel";
 import AttachmentViewer from "./AttachmentViewer";
@@ -293,6 +294,24 @@ export default function Editor({ initial, onBack }: Props) {
     apply((d) => ({ ...d, sheets: [...d.sheets, s], activeId: s.id }));
     setSelectedId(s.rootId);
     setFitKey((k) => k + 1);
+  };
+  const mapToTableSheet = (mode: "path" | "branch") => {
+    const t = mapToTable(sheet, mode);
+    if (!t) return say("Peta kosong, tidak bisa dijadikan tabel");
+    const s = newTableSheet(`${sheet.title} (tabel)`, "blank");
+    s.table = t;
+    apply((d) => ({ ...d, sheets: [...d.sheets, s], activeId: s.id }));
+    setSelectedId(null);
+  };
+  const importSheets = async (f: File) => {
+    const imp = await importAny(f, doc.id);
+    if (!imp || !imp.sheets.length) return say("Berkas tidak dikenali (.mapit, peta lintas aplikasi, .json, .md, .txt, .csv, .tsv)");
+    const added = imp.sheets.map((x) => ({ ...x, id: uid() }));
+    setShowNew(false);
+    apply((d) => ({ ...d, sheets: [...d.sheets, ...added], activeId: added[0].id }));
+    setSelectedId(added[0].table ? null : added[0].rootId);
+    setFitKey((k) => k + 1);
+    say(`${added.length} lembar diimpor`);
   };
   const renameSheet = (id: string, title: string) => apply((d) => replaceSheet(d, id, (s) => ({ ...s, title })));
   const duplicateSheet = (id: string) => {
@@ -656,6 +675,7 @@ export default function Editor({ initial, onBack }: Props) {
             onNodes={(fn) => setNodes(fn)}
             onPatch={patchSel}
             onStructure={setStructure}
+            onToTable={mapToTableSheet}
             onPickNodeImage={() => imgInput.current?.click()}
             onPickFloat={() => floatInput.current?.click()}
             onPickBg={() => bgInput.current?.click()}
@@ -704,6 +724,20 @@ export default function Editor({ initial, onBack }: Props) {
             <div className="modal-head"><b>Lembar baru</b><div className="spacer" /><button className="btn icon small" onClick={() => setShowNew(false)}>✕</button></div>
             <div className="newsheet-list">
               <button className="newsheet-item" onClick={addMapSheet}><b>🧠 Peta pikiran</b><span className="small muted">Topik bercabang seperti biasa</span></button>
+              <label className="newsheet-item" style={{ cursor: "pointer" }}>
+                <b>📥 Impor berkas…</b>
+                <span className="small muted">.mapit, peta lintas aplikasi (.xmind), .json, Markdown/teks, .csv/.tsv (jadi tabel)</span>
+                <input
+                  type="file"
+                  hidden
+                  accept=".mapit,.mindpitch,.xmind,.zip,.json,.md,.markdown,.txt,.csv,.tsv"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) importSheets(f);
+                  }}
+                />
+              </label>
               {TABLE_TEMPLATES.map((x) => (
                 <button key={x.id} className="newsheet-item" onClick={() => addTableSheet(x.id)}><b>▦ {x.title}</b><span className="small muted">{x.sub}</span></button>
               ))}

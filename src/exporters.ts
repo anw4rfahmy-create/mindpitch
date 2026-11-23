@@ -1,6 +1,6 @@
-import { tableToMarkdown } from "./table";
+import { parseDelimited, tableFromGrid, tableToMarkdown } from "./table";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { addChild, newSheet, normalizeWorkbook, uid, activeSheet } from "./model";
+import { addChild, newSheet, newTableSheet, newWorkbook, normalizeWorkbook, uid, activeSheet } from "./model";
 import { filesOfDoc, putFile } from "./files";
 import { fromXmind } from "./xmind";
 import { Sheet, Workbook } from "./types";
@@ -31,16 +31,27 @@ export async function toMindpitch(wb: Workbook): Promise<Blob> {
 }
 
 /** Impor .mindpitch / .json / .md / .txt. Berkas lampiran ditulis ke IndexedDB dengan id dokumen baru. */
-export async function importFile(file: File): Promise<Workbook | null> {
+export async function importFile(file: File, targetDocId?: string): Promise<Workbook | null> {
   const name = file.name.toLowerCase();
   try {
+    if (name.endsWith(".csv") || name.endsWith(".tsv")) {
+      const grid = parseDelimited(await file.text());
+      if (!grid.length) return null;
+      const title = file.name.replace(/\.[^.]+$/, "");
+      const wb = newWorkbook(title);
+      const s = newTableSheet(title, "blank");
+      s.table = tableFromGrid(grid);
+      wb.sheets = [s];
+      wb.activeId = s.id;
+      return wb;
+    }
     if (name.endsWith(".xmind")) return await fromXmind(file);
     if (name.endsWith(".mapit") || name.endsWith(".mindpitch") || name.endsWith(".zip")) {
       const z = unzipSync(new Uint8Array(await file.arrayBuffer()));
       const meta = JSON.parse(strFromU8(z["workbook.json"]));
       const wb = normalizeWorkbook(meta.workbook);
       if (!wb) return null;
-      const newId = uid();
+      const newId = targetDocId ?? uid();
       for (const f of meta.files ?? []) {
         const data = z["files/" + f.id];
         if (data) await putFile(newId, new Blob([data as BlobPart], { type: f.type }), f.name, f.type, f.id);

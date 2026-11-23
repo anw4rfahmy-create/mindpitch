@@ -45,6 +45,7 @@ interface Props {
   onNodes(fn: (n: Sheet["nodes"]) => Sheet["nodes"]): void;
   onPatch(p: Partial<MNode>): void;
   onStructure(s: StructureId): void;
+  onToTable(mode: "path" | "branch"): void;
   onPickNodeImage(): void;
   onPickFloat(): void;
   onPickBg(): void;
@@ -323,6 +324,14 @@ export default function FormatPanel(p: Props) {
                 </button>
               ))}
             </div>
+          </div>
+          <div className="field">
+            <span>Ubah menjadi tabel</span>
+            <div className="seg wrap">
+              <button onClick={() => p.onToTable("path")} title="Satu kolom per tingkat topik; tiap baris adalah satu jalur sampai ujung cabang">▦ Per tingkat</button>
+              <button onClick={() => p.onToTable("branch")} title="Satu kolom per cabang utama; anak-anaknya menjadi baris">▦ Per cabang</button>
+            </div>
+            <small className="muted">Peta asli tetap ada. Tabel dibuat sebagai lembar baru yang bisa diedit bebas.</small>
           </div>
           <div className="field">
             <span>Font peta (Arab &amp; Indonesia)</span>

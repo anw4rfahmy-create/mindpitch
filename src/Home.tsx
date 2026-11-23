@@ -113,7 +113,7 @@ export default function Home({ onOpen }: Props) {
         <input
           ref={fileRef}
           type="file"
-          accept=".mapit,.mindpitch,.xmind,.zip,.json,.md,.markdown,.txt"
+          accept=".mapit,.mindpitch,.xmind,.zip,.json,.md,.markdown,.txt,.csv,.tsv"
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];

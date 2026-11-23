@@ -305,3 +305,87 @@ export function templateTable(id: TableTemplate): TableData {
   t.stripe = true;
   return t;
 }
+
+// ---------------------------------------------------------------- konversi
+/** Bentuk tabel dari kisi teks (baris pertama = header). */
+export function tableFromGrid(grid: string[][]): TableData {
+  const rows = Math.max(1, grid.length);
+  const cols = Math.max(1, ...grid.map((r) => r.length));
+  const t = blankTable(rows, cols);
+  t.cells = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => grid[r]?.[c] ?? ""));
+  const all = t.cells.flat().filter((x) => x.trim());
+  const ar = all.filter((x) => isRtl(x)).length;
+  if (all.length && ar / all.length > 0.5) {
+    t.rtl = true;
+    t.fontSize = 24;
+    t.headBg = "#0f766e";
+  } else t.fontSize = 18;
+  return t;
+}
+
+/** Ubah peta menjadi tabel: "path" = satu kolom per tingkat; "branch" = satu kolom per cabang utama. */
+export function mapToTable(sheet: Sheet, mode: "path" | "branch"): TableData | null {
+  const N = sheet.nodes;
+  const root = N[sheet.rootId];
+  if (!root) return null;
+  const kids = (id: string) => (N[id]?.children ?? []).filter((c) => N[c]);
+  const txt = (id: string) => N[id].text.trim();
+  if (mode === "branch") {
+    const heads = kids(sheet.rootId);
+    if (heads.length && heads.some((h) => kids(h).length)) {
+      const cols = heads.map((h) => kids(h));
+      const n = Math.max(...cols.map((c) => c.length));
+      const grid = [heads.map(txt), ...Array.from({ length: n }, (_, r) => cols.map((c) => (c[r] ? txt(c[r]) : "")))];
+      return tableFromGrid(grid);
+    }
+  }
+  const paths: string[][] = [];
+  const walk = (id: string, stack: string[]) => {
+    const k = kids(id);
+    if (!k.length) {
+      if (stack.length) paths.push(stack);
+      return;
+    }
+    k.forEach((c) => walk(c, [...stack, txt(c)]));
+  };
+  walk(sheet.rootId, []);
+  if (!paths.length) return tableFromGrid([[txt(sheet.rootId)]]);
+  const depth = Math.max(...paths.map((p) => p.length));
+  const grid: string[][] = [Array.from({ length: depth }, (_, i) => `Tingkat ${i + 1}`)];
+  paths.forEach((p, r) => {
+    grid.push(
+      Array.from({ length: depth }, (_, c) => {
+        if (c >= p.length) return "";
+        const prev = paths[r - 1];
+        return prev && prev.length > c && prev.slice(0, c + 1).every((v, i) => v === p[i]) ? "" : p[c];
+      })
+    );
+  });
+  return tableFromGrid(grid);
+}
+
+/** Urai CSV/TSV (otomatis mendeteksi pemisah; mendukung tanda kutip). */
+export function parseDelimited(text: string): string[][] {
+  const src = text.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+  const first = src.split("\n").find((l) => l.trim()) ?? "";
+  const count = (ch: string) => first.split(ch).length - 1;
+  const delim = count("\t") > 0 ? "\t" : count(";") > count(",") ? ";" : ",";
+  const rows: string[][] = [];
+  let row: string[] = [],
+    cur = "",
+    q = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (q) {
+      if (ch === '"' && src[i + 1] === '"') (cur += '"', i++);
+      else if (ch === '"') q = false;
+      else cur += ch;
+    } else if (ch === '"' && cur === "") q = true;
+    else if (ch === delim) (row.push(cur), (cur = ""));
+    else if (ch === "\n") (row.push(cur), rows.push(row), (row = []), (cur = ""));
+    else cur += ch;
+  }
+  if (cur !== "" || row.length) (row.push(cur), rows.push(row));
+  while (rows.length && rows[rows.length - 1].every((c) => !c.trim())) rows.pop();
+  return rows;
+}
