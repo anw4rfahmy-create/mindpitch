@@ -43,3 +43,21 @@ Presentasi: ←/→ atau ketuk, `A` putar otomatis, `N` catatan, Esc keluar.
 
 ## Belum ada
 Batas (Boundary) dan Relasi dari aplikasi sejenis; Ringkasan belum ikut ke berkas lintas aplikasi; suara pada video Presentasi.
+
+## Konektor MCP untuk Claude
+
+Map It menyediakan server MCP (Streamable HTTP, tanpa login, tanpa penyimpanan) di `https://mapit-anwar.vercel.app/mcp`
+(kode: `api/mcp.ts`). Tool:
+
+| Tool | Fungsi |
+| --- | --- |
+| `create_mindmap` | Peta pikiran dari outline Markdown (`- ` bertingkat), struktur opsional |
+| `create_table` | Lembar tabel dari daftar baris (Arab/harakat didukung, RTL otomatis) |
+| `create_workbook` | Satu berkas berisi beberapa lembar campuran (peta + tabel) |
+
+Tool mengembalikan **tautan** `…/#import=…` (spesifikasi dipadatkan deflate+base64url). Saat tautan dibuka, aplikasi
+meminta konfirmasi lalu membuat berkas di perangkat pengguna (`src/shareLink.ts`). Server tidak menyimpan data apa pun.
+
+Pasang di Claude: Pengaturan › Konektor › *Tambah konektor kustom* › URL di atas (ketersediaan bergantung paket).
+Uji lokal: `npx esbuild api/mcp.ts --bundle --platform=node --format=esm --outfile=mcp.mjs`, jalankan dengan `http.createServer`,
+lalu sambungkan klien MCP ke `http://localhost:PORT/mcp`. Variabel `APP_URL` mengubah alamat dasar tautan.
