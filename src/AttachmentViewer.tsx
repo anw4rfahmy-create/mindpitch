@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Attachment } from "./types";
 import { MAX_FILE_BYTES, downloadStored, getFile, kindOf, urlOfAsync } from "./files";
+
+const PdfView = lazy(() => import("./PdfView"));
 
 interface Props {
   title: string;
@@ -17,6 +19,7 @@ const fmt = (n: number) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Mat
 export default function AttachmentViewer({ title, items, startId, onAdd, onRemove, onClose }: Props) {
   const [cur, setCur] = useState<string | undefined>(startId ?? items[0]?.id);
   const [url, setUrl] = useState<string>();
+  const [pdfFail, setPdfFail] = useState(false);
   const att = items.find((a) => a.id === cur) ?? items[0];
 
   useEffect(() => {
@@ -25,6 +28,7 @@ export default function AttachmentViewer({ title, items, startId, onAdd, onRemov
 
   useEffect(() => {
     setUrl(undefined);
+    setPdfFail(false);
     if (att) urlOfAsync(att.id).then(setUrl);
   }, [att?.id]);
 
@@ -89,7 +93,19 @@ export default function AttachmentViewer({ title, items, startId, onAdd, onRemov
             {!att && <div className="muted">Pilih lampiran untuk dilihat</div>}
             {att && !url && <div className="muted">Memuat…</div>}
             {att && url && kind === "image" && <img src={url} alt={att.name} />}
-            {att && url && kind === "pdf" && <object data={url} type="application/pdf"><div className="center-note"><p>Peramban ini tidak dapat menampilkan PDF di sini.</p><button className="btn" onClick={download}>Unduh PDF</button></div></object>}
+            {att && url && kind === "pdf" && !pdfFail && (
+              <Suspense fallback={<div className="muted">Memuat…</div>}>
+                <PdfView url={url} onFail={() => setPdfFail(true)} />
+              </Suspense>
+            )}
+            {att && url && kind === "pdf" && pdfFail && (
+              <div className="center-note">
+                <div style={{ fontSize: 54 }}>{ICON.pdf}</div>
+                <b>{att.name}</b>
+                <p className="muted small">PDF tidak dapat ditampilkan di sini.</p>
+                <button className="btn primary" onClick={download}>⬇ Unduh / Buka</button>
+              </div>
+            )}
             {att && url && kind === "video" && <video src={url} controls />}
             {att && url && kind === "audio" && <audio src={url} controls />}
             {att && url && !["image", "pdf", "video", "audio"].includes(kind) && (
@@ -106,7 +122,7 @@ export default function AttachmentViewer({ title, items, startId, onAdd, onRemov
                 </button>
               </div>
             )}
-            {att && url && ["image", "pdf"].includes(kind) && (
+            {att && url && ["image"].includes(kind) && (
               <button className="btn small dl" onClick={download}>
                 ⬇ Unduh
               </button>

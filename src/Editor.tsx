@@ -397,6 +397,15 @@ export default function Editor({ initial, onBack }: Props) {
     });
     setFitKey((k) => k + 1);
   };
+  const reorderSheet = (id: string, to: number) =>
+    apply((d) => {
+      const i = d.sheets.findIndex((x) => x.id === id);
+      if (i < 0 || to < 0 || to >= d.sheets.length || i === to) return d;
+      const sheets = d.sheets.slice();
+      const [m] = sheets.splice(i, 1);
+      sheets.splice(to, 0, m);
+      return { ...d, sheets };
+    });
   const moveSheet = (id: string, dir: -1 | 1) =>
     apply((d) => {
       const i = d.sheets.findIndex((x) => x.id === id);
@@ -705,7 +714,7 @@ export default function Editor({ initial, onBack }: Props) {
         <div className="canvas-col">
           {sheet.table ? (
             <div className="canvas-area">
-              <TableEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, table: fn(sh.table!) }))} onPresent={() => setShowPitch(true)} />
+              <TableEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, table: fn(sh.table!) }))} onPresent={() => setShowPitch(true)} onFocusMode={() => setZen(true)} />
               {toast && <div className="toast">{toast}</div>}
             </div>
           ) : (
@@ -810,6 +819,7 @@ export default function Editor({ initial, onBack }: Props) {
             onDuplicate={duplicateSheet}
             onDelete={deleteSheet}
             onMove={moveSheet}
+            onReorder={reorderSheet}
           />
         </div>
 

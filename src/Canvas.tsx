@@ -419,6 +419,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     [layout, sheet]
   );
 
+  const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
+  const clipScale = Math.min(coarse ? 2.4 : 1.6, Math.max(1, (coarse ? 1.3 : 1) / view.k));
   const nodeEls = useMemo(
     () =>
       layout.order.map((id) => {
@@ -518,7 +520,8 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
             )}
             {n.note && <circle cx={ln.w - 3} cy={3} r={4.5} fill="#f59e0b" stroke="#fff" strokeWidth={1.5} pointerEvents="none" />}
             {ac > 0 && (
-              <g data-clip={id} transform={`translate(${ln.w - 2},${ln.h - 2})`} style={{ cursor: "pointer" }}>
+              <g data-clip={id} transform={`translate(2,2) scale(${clipScale})`} style={{ cursor: "pointer" }}>
+                <circle r={coarse ? 15 : 12} fill="transparent" />
                 <circle r={9} fill="#fff" stroke="#64748b" strokeWidth={1.3} />
                 <path d="M-3.5,1.5 L1,-3.2 a2,2 0 0 1 2.8,2.8 L-1.8,4.4 a3.3,3.3 0 0 1 -4.6,-4.6 L-0.8,-5.8" fill="none" stroke="#475569" strokeWidth={1.2} strokeLinecap="round" transform="scale(.85)" />
                 {ac > 1 && (
@@ -548,7 +551,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         );
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout, sheet, selectedId, editingId, multiIds, filesVersion()]
+    [layout, sheet, selectedId, editingId, multiIds, filesVersion(), clipScale]
   );
 
   const boundaries = useMemo(
@@ -593,7 +596,6 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
   }, [layout, sheet]);
 
   // ukuran tetap di layar (px) agar mudah disentuh di HP, berapa pun zoom-nya
-  const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
   const badgeScale = Math.min(coarse ? 1.7 : 1.35, Math.max(0.8, (coarse ? 0.95 : 0.85) / view.k));
   const badges = layout.order.map((id) => {
     const ln = layout.nodes[id];

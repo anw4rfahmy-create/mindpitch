@@ -9,6 +9,7 @@ interface Props {
   sheet: Sheet;
   onChange(fn: (t: TableData) => TableData): void;
   onPresent(): void;
+  onFocusMode?(): void;
 }
 
 const BG = ["#ffffff", "#fef3c7", "#d1fae5", "#dbeafe", "#fce7f3", "#fee2e2", "#ede9fe", "#0f766e", "#4f46e5", "#1e293b"];
@@ -76,11 +77,51 @@ function Cell(p: {
   );
 }
 
-export default function TableEditor({ sheet, onChange, onPresent }: Props) {
+export default function TableEditor({ sheet, onChange, onPresent, onFocusMode }: Props) {
   const t = sheet.table!;
   const [sel, setSel] = useState<Sel>({ kind: "cell", r: 0, c: 0 });
   const [tick, setTick] = useState(0);
   const [live, setLive] = useState<number[] | null>(null);
+  const narrow = typeof matchMedia !== "undefined" && matchMedia("(max-width: 720px)").matches;
+  const [tools, setTools] = useState(!narrow);
+  const [zoom, setZoom] = useState(() => (narrow ? 0.85 : 1));
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const scrollEl = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollEl.current;
+    if (el && t.rtl) el.scrollLeft = el.scrollWidth;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // cubit dua jari untuk memperbesar/memperkecil tabel
+  useEffect(() => {
+    const el = scrollEl.current;
+    if (!el) return;
+    let d0 = 0,
+      z0 = 1;
+    const dist = (e: TouchEvent) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const ts = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        d0 = dist(e);
+        z0 = zoomRef.current;
+      }
+    };
+    const tm = (e: TouchEvent) => {
+      if (e.touches.length === 2 && d0) {
+        e.preventDefault();
+        setZoom(Math.max(0.4, Math.min(2.5, z0 * (dist(e) / d0))));
+      }
+    };
+    const te = () => (d0 = 0);
+    el.addEventListener("touchstart", ts, { passive: true });
+    el.addEventListener("touchmove", tm, { passive: false });
+    el.addEventListener("touchend", te);
+    return () => {
+      el.removeEventListener("touchstart", ts);
+      el.removeEventListener("touchmove", tm);
+      el.removeEventListener("touchend", te);
+    };
+  }, []);
   const thRefs = useRef<(HTMLTableCellElement | null)[]>([]);
   const W = live ?? t.colW;
   const setW = W.filter((w) => w > 0);
@@ -168,7 +209,19 @@ export default function TableEditor({ sheet, onChange, onPresent }: Props) {
 
   return (
     <div className="tbl-wrap">
-      <div className="tbl-bar">
+      <div className="tbl-top">
+        <button className={"btn small" + (tools ? " active" : "")} onClick={() => setTools((v) => !v)}>
+          🛠 Alat tabel {tools ? "▴" : "▾"}
+        </button>
+        {onFocusMode && (
+          <button className="btn small" onClick={onFocusMode} title="Sembunyikan semua menu agar fokus ke materi">
+            ⛶ Fokus
+          </button>
+        )}
+        <div className="spacer" />
+        <button className="btn primary small" onClick={onPresent}>▶ Tampilkan bertahap</button>
+      </div>
+      <div className="tbl-bar" hidden={!tools}>
         <div className="tbl-group">
           <span className="tbl-label">Baris</span>
           <button className="btn small" onClick={() => onChange((x) => insertRow(x, rowsSel))} title="Sisipkan baris di atas">＋▲</button>
@@ -230,14 +283,12 @@ export default function TableEditor({ sheet, onChange, onPresent }: Props) {
           <button className="btn small" onClick={() => style({ size: Math.max(9, t.fontSize - 4) })} title="Huruf sel lebih kecil">▼</button>
           <button className="btn small" onClick={() => style({ size: undefined, bold: undefined, align: undefined, color: undefined })} title="Reset gaya sel">⟲</button>
         </div>
-        <div className="spacer" />
-        <button className="btn primary small" onClick={onPresent}>▶ Tampilkan bertahap</button>
       </div>
-      <div className="tbl-hint small muted">
+      <div className="tbl-hint small muted" hidden={!tools}>
         Ketik langsung di sel · <kbd>Enter</kbd> turun · <kbd>Tab</kbd> ke sel berikut · <kbd>Shift</kbd>+<kbd>Enter</kbd> baris baru dalam sel · tempel (Ctrl+V) tabel dari Word/Excel akan mengisi banyak sel sekaligus · klik nomor baris/kolom untuk memilihnya.
       </div>
-      <div className="tbl-scroll">
-        <table className="tbl" dir={t.rtl ? "rtl" : "ltr"} style={{ width: "calc(100% - 34px)", marginInlineStart: 34, tableLayout: anySet ? "fixed" : "auto" }}>
+      <div className="tbl-scroll" ref={scrollEl}>
+        <table className="tbl" dir={t.rtl ? "rtl" : "ltr"} style={{ width: "calc(100% - 34px)", minWidth: 34 + t.cols * 120, marginInlineStart: 34, tableLayout: anySet ? "fixed" : "auto", zoom }}>
           <colgroup>
             <col style={{ width: 0 }} />
             {Array.from({ length: t.cols }, (_, c) => (
@@ -280,6 +331,11 @@ export default function TableEditor({ sheet, onChange, onPresent }: Props) {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="tbl-zoom">
+        <button className="btn icon" onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.15).toFixed(2)))} aria-label="Perbesar tabel">＋</button>
+        <button className="btn icon" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.15).toFixed(2)))} aria-label="Perkecil tabel">−</button>
+        <button className="btn icon" onClick={() => setZoom(1)} aria-label="Ukuran 100%" title="100%">1:1</button>
       </div>
     </div>
   );

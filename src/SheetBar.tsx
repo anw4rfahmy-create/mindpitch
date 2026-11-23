@@ -12,12 +12,78 @@ interface Props {
   onDuplicate(id: string): void;
   onDelete(id: string): void;
   onMove(id: string, dir: -1 | 1): void;
+  onReorder(id: string, toIndex: number): void;
 }
 
 export default function SheetBar(p: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const tabs = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<{ id: string; to: number } | null>(null);
+  const dragRef = useRef<{ id: string; x0: number; y0: number; on: boolean; timer: number; touch: boolean; to: number } | null>(null);
+
+  const targetIndex = (x: number) => {
+    const els = Array.from(tabs.current?.querySelectorAll<HTMLElement>(".sheet-tab") ?? []);
+    let to = els.length - 1;
+    for (let i = 0; i < els.length; i++) {
+      const r = els[i].getBoundingClientRect();
+      if (x < r.left + r.width / 2) {
+        to = i;
+        break;
+      }
+    }
+    return to;
+  };
+  const startDrag = (id: string, e: React.PointerEvent) => {
+    if (editing || (e.target as HTMLElement).closest("input,.sheet-more")) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const d = { id, x0: e.clientX, y0: e.clientY, on: false, timer: 0, touch: e.pointerType !== "mouse", to: 0 };
+    dragRef.current = d;
+    // di layar sentuh: tahan sebentar dulu supaya geser biasa tetap menggulir daftar lembar
+    if (d.touch) d.timer = window.setTimeout(() => ((d.on = true), (d.to = p.sheets.findIndex((s) => s.id === id)), setDrag({ id, to: d.to }), navigator.vibrate?.(15)), 350);
+    const move = (ev: PointerEvent) => {
+      if (!d.on) {
+        const dist = Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0);
+        if (d.touch) {
+          if (dist > 10) {
+            window.clearTimeout(d.timer);
+            cleanup();
+          }
+          return;
+        }
+        if (dist < 6) return;
+        d.on = true;
+      }
+      ev.preventDefault();
+      d.to = targetIndex(ev.clientX);
+      setDrag({ id, to: d.to });
+    };
+    const tm = (ev: TouchEvent) => d.on && ev.cancelable && ev.preventDefault();
+    const up = () => {
+      window.clearTimeout(d.timer);
+      const was = d.on;
+      cleanup();
+      if (was) {
+        suppress.current = true;
+        window.setTimeout(() => (suppress.current = false), 50);
+        const from = p.sheets.findIndex((s) => s.id === id);
+        if (d.to !== from) p.onReorder(id, d.to);
+      }
+      setDrag(null);
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      window.removeEventListener("touchmove", tm);
+      dragRef.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    window.addEventListener("touchmove", tm, { passive: false });
+  };
+  const suppress = useRef(false);
 
   useEffect(() => {
     const el = tabs.current?.querySelector<HTMLElement>(".sheet-tab.on");
@@ -49,8 +115,9 @@ export default function SheetBar(p: Props) {
         {p.sheets.map((s) => (
           <div
             key={s.id}
-            className={"sheet-tab" + (s.id === p.activeId ? " on" : "")}
-            onClick={() => p.onSelect(s.id)}
+            className={"sheet-tab" + (s.id === p.activeId ? " on" : "") + (drag?.id === s.id ? " dragging" : "") + (drag && drag.id !== s.id && p.sheets[drag.to]?.id === s.id ? (drag.to > p.sheets.findIndex((x) => x.id === drag.id) ? " drop-after" : " drop-before") : "")}
+            onPointerDown={(e) => startDrag(s.id, e)}
+            onClick={() => !suppress.current && p.onSelect(s.id)}
             onDoubleClick={() => setEditing(s.id)}
             onContextMenu={(e) => openMenu(s.id, e)}
           >
@@ -88,6 +155,9 @@ export default function SheetBar(p: Props) {
             )}
           </div>
         ))}
+        <button className="sheet-add inline" onClick={p.onAdd} title="Tambah lembar" aria-label="Tambah lembar di akhir">
+          +
+        </button>
       </div>
       <div className="spacer" />
       <span className="sheet-status small muted">{p.topicCount} {p.unit ?? "topik"}</span>

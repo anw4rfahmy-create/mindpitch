@@ -1299,3 +1299,28 @@ kbd {
 .sc-row.cap kbd { outline: 2px solid var(--accent); }
 @media (max-width: 720px) { .rb { min-width: 54px; padding: 4px 6px; } }
 .editor.zen > .topbar, .editor.zen .ribbon, .editor.zen .actionbar, .editor.zen .sheetbar, .editor.zen .side, .editor.zen .zoom-box { display: none !important; }
+
+/* ---------- tabel: HP / fokus ---------- */
+.tbl-wrap { position: absolute; inset: 0; height: auto; }
+.tbl-top { display: flex; gap: 6px; align-items: center; padding: 6px 8px; background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.tbl-bar { max-height: 42vh; overflow: auto; flex-shrink: 0; }
+.tbl-bar[hidden], .tbl-hint[hidden] { display: none; }
+.tbl-scroll { min-height: 0; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-x pan-y; padding-top: 4px; }
+.tbl-zoom { position: absolute; right: 10px; bottom: 14px; display: flex; flex-direction: column; gap: 6px; z-index: 5; }
+.editor.zen .tbl-top, .editor.zen .tbl-bar, .editor.zen .tbl-hint { display: none !important; }
+@media (pointer: coarse) {
+  .tbl-bar .swatch { width: 28px; height: 28px; }
+  .tbl-bar .btn.small, .tbl-top .btn.small { min-height: 34px; padding: 4px 10px; }
+  .tbl-bar select { padding: 6px 4px; }
+}
+.pdf-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.pdf-scroll { flex: 1; overflow: auto; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; }
+.pdf-page { background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.25); flex-shrink: 0; max-width: none; }
+.pdf-busy { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--panel); padding: 4px 10px; border-radius: 999px; box-shadow: var(--shadow); }
+.pdf-ctrl { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; align-items: center; background: var(--panel); padding: 4px 8px; border-radius: 999px; box-shadow: var(--shadow); }
+@media (max-width: 700px) { .attach-modal { height: 100%; } .modal-back { padding: 0; } .attach-modal { border-radius: 0; } }
+.sheet-add.inline { flex-shrink: 0; align-self: center; }
+.sheet-tab.dragging { opacity: 0.55; transform: translateY(-2px); }
+.sheet-tab.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.sheet-tab.drop-after { box-shadow: 3px 0 0 var(--accent); }
+.sheet-tab { touch-action: pan-x; }
