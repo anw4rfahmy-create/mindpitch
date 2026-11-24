@@ -1324,3 +1324,5 @@ kbd {
 .sheet-tab.drop-before { box-shadow: -3px 0 0 var(--accent); }
 .sheet-tab.drop-after { box-shadow: 3px 0 0 var(--accent); }
 .sheet-tab { touch-action: pan-x; }
+.tbl-canvas { position: relative; margin: 0 auto; }
+.tbl-scroll { padding: 0; }

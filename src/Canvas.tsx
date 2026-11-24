@@ -54,6 +54,7 @@ interface Props {
   selRel?: string | null;
   onSelectRel?(id: string | null): void;
   onDeco?(id: string, kind: string): void;
+  onTapNode?(id: string): void;
   pickMode?: boolean;
 }
 
@@ -87,6 +88,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     moved: boolean;
   } | null>(null);
   const lastTap = useRef<{ id: string; t: number } | null>(null);
+  const tapTimer = useRef(0);
   const lastTapCandidate = useRef<string | null>(null);
   const [drag, setDrag] = useState<{ id: string; wx: number; wy: number; target: string | null } | null>(null);
 
@@ -379,10 +381,15 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
       const id = lastTapCandidate.current;
       const now = Date.now();
       const lt = lastTap.current;
+      window.clearTimeout(tapTimer.current);
       if (lt && lt.id === id && now - lt.t < 400) {
         lastTap.current = null;
         props.onStartEdit(id);
-      } else lastTap.current = { id, t: now };
+      } else {
+        lastTap.current = { id, t: now };
+        // ketukan tunggal: beri jeda sebentar agar ketuk dua kali (ubah teks) tetap bisa
+        tapTimer.current = window.setTimeout(() => props.onTapNode?.(id), 320);
+      }
     } else if (pan.current && !pan.current.moved) {
       props.onSelect(null);
       props.onSelectFloat(null);

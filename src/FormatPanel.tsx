@@ -41,6 +41,8 @@ interface Props {
   tab: "topic" | "map" | "keys" | "help";
   onTab(t: "topic" | "map" | "keys" | "help"): void;
   shortcuts: Record<string, string>;
+  tapAttach: boolean;
+  onTapAttach(v: boolean): void;
   onCustomize(): void;
   selFloat: string | null;
   onSheet(fn: (s: Sheet) => Sheet): void;
@@ -355,6 +357,10 @@ export default function FormatPanel(p: Props) {
 
       {tab === "map" && (
         <>
+          <label className="field row" style={{ alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={p.tapAttach} onChange={(e) => p.onTapAttach(e.target.checked)} />
+            <span>Ketuk topik yang punya lampiran langsung membuka lampirannya</span>
+          </label>
           <div className="field">
             <span>Struktur</span>
             <div className="struct-grid">

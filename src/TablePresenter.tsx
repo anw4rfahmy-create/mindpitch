@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ensureFonts, familyCss, isRtl } from "./fonts";
-import { cellFontId, cellLineH, resolveCell } from "./table";
+import { cellFontId, cellLineH, mergeMaps, resolveCell } from "./table";
 import { Sheet } from "./types";
 
 type Mode = "row" | "col" | "cell" | "down" | "tap" | "all";
@@ -15,6 +15,7 @@ export default function TablePresenter({ sheet, onClose }: { sheet: Sheet; onClo
   const [, setTick] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const tbl = useRef<HTMLTableElement>(null);
+  const { anchors, covered } = mergeMaps(t);
   const bodyR = Math.max(0, t.rows - t.headRows),
     bodyC = Math.max(0, t.cols - t.headCols);
   const total = mode === "row" ? bodyR : mode === "col" ? bodyC : mode === "cell" || mode === "down" || mode === "tap" ? bodyR * bodyC : 0;
@@ -89,6 +90,8 @@ export default function TablePresenter({ sheet, onClose }: { sheet: Sheet; onClo
             {Array.from({ length: t.rows }, (_, r) => (
               <tr key={r}>
                 {Array.from({ length: t.cols }, (_, c) => {
+                  if (covered.has(`${r},${c}`)) return null;
+                  const mg = anchors.get(`${r},${c}`);
                   const txt = t.cells[r]?.[c] ?? "";
                   const res = resolveCell(t, r, c);
                   const rtl = isRtl(txt);
@@ -96,6 +99,8 @@ export default function TablePresenter({ sheet, onClose }: { sheet: Sheet; onClo
                   return (
                     <td
                       key={c}
+                      rowSpan={mg?.rs}
+                      colSpan={mg?.cs}
                       onClick={(e) => {
                         if (mode !== "tap" || r < t.headRows || c < t.headCols) return;
                         e.stopPropagation();

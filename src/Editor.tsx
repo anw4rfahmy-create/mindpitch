@@ -58,6 +58,21 @@ export default function Editor({ initial, onBack }: Props) {
   const [showExport, setShowExport] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [attachFor, setAttachFor] = useState<string | null>(null);
+  const [tapAttach, setTapAttach] = useState(() => {
+    try {
+      return localStorage.getItem("mapit-tap-attach") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const changeTapAttach = (v: boolean) => {
+    setTapAttach(v);
+    try {
+      localStorage.setItem("mapit-tap-attach", v ? "1" : "0");
+    } catch {
+      /* abaikan */
+    }
+  };
   const [focusToken, setFocusToken] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [insertKind, setInsertKind] = useState<InsertKind | null>(null);
@@ -65,6 +80,7 @@ export default function Editor({ initial, onBack }: Props) {
   const [selRel, setSelRel] = useState<string | null>(null);
   const [relEdit, setRelEdit] = useState(false);
   const [zen, setZen] = useState(false);
+  const [tblTools, setTblTools] = useState(() => !(typeof matchMedia !== "undefined" && matchMedia("(max-width: 720px)").matches));
   const [menu, setMenu] = useState<{ kind: "ins" | "link"; x: number; y: number } | null>(null);
   const [scMap, setScMap] = useState(loadShortcuts);
   const [showSc, setShowSc] = useState(false);
@@ -630,12 +646,20 @@ export default function Editor({ initial, onBack }: Props) {
         <button className="btn icon" disabled={!canRedo} onClick={redo} title="Ulangi (Ctrl+Y)">
           ↷
         </button>
-        <button hidden={!!sheet.table} className={"btn" + (showOutline ? " active" : "")} onClick={() => setShowOutline((v) => !v)}>
-          ☰ <span className="hide-sm">Outline</span>
-        </button>
-        <button hidden={!!sheet.table} className={"btn" + (showFormat && panelTab !== "keys" && panelTab !== "help" ? " active" : "")} onClick={() => (showFormat && panelTab !== "keys" && panelTab !== "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab(sel ? "topic" : "map")))}>
-          🎨 <span className="hide-sm">Format</span>
-        </button>
+        {!sheet.table && (
+          <button className={"btn" + (showOutline ? " active" : "")} onClick={() => setShowOutline((v) => !v)}>
+            ☰ <span className="hide-sm">Outline</span>
+          </button>
+        )}
+        {sheet.table ? (
+          <button className={"btn" + (tblTools ? " active" : "")} onClick={() => setTblTools((v) => !v)}>
+            🎨 <span className="hide-sm">Format</span>
+          </button>
+        ) : (
+          <button className={"btn" + (showFormat && panelTab !== "keys" && panelTab !== "help" ? " active" : "")} onClick={() => (showFormat && panelTab !== "keys" && panelTab !== "help" ? setShowFormat(false) : (setShowFormat(true), setPanelTab(sel ? "topic" : "map")))}>
+            🎨 <span className="hide-sm">Format</span>
+          </button>
+        )}
         <button className={"btn icon" + (showFormat && (panelTab === "keys" || panelTab === "help") ? " active" : "")} title="Pintasan keyboard &amp; panduan (?)" aria-label="Pintasan" onClick={() => (showFormat && (panelTab === "keys" || panelTab === "help") ? setShowFormat(false) : (setShowFormat(true), setPanelTab("keys")))}>
           ?
         </button>
@@ -714,7 +738,7 @@ export default function Editor({ initial, onBack }: Props) {
         <div className="canvas-col">
           {sheet.table ? (
             <div className="canvas-area">
-              <TableEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, table: fn(sh.table!) }))} onPresent={() => setShowPitch(true)} onFocusMode={() => setZen(true)} />
+              <TableEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, table: fn(sh.table!) }))} onPresent={() => setShowPitch(true)} onFocusMode={() => setZen(true)} tools={tblTools} onTools={setTblTools} />
               {toast && <div className="toast">{toast}</div>}
             </div>
           ) : (
@@ -745,6 +769,7 @@ export default function Editor({ initial, onBack }: Props) {
                 setMulti([]);
               }}
               onDeco={onDeco}
+              onTapNode={(id) => tapAttach && !relFrom && sheet.nodes[id]?.attachments?.length && setAttachFor(id)}
               pickMode={!!relFrom}
             />
             {relFrom && (
@@ -848,6 +873,8 @@ export default function Editor({ initial, onBack }: Props) {
             onAttachFiles={(f) => sel && addAttachments(sel.id, f)}
             onClose={() => setShowFormat(false)}
             shortcuts={scMap}
+            tapAttach={tapAttach}
+            onTapAttach={changeTapAttach}
             onCustomize={() => setShowSc(true)}
           />
         )}

@@ -2,7 +2,7 @@
 import { ensureFonts, familyCss, fontString, isRtl } from "./fonts";
 import { textWidth, wrapCached } from "./measure";
 import { contrastText } from "./nodeStyle";
-import { CellStyle, Sheet, TableData } from "./types";
+import { CellStyle, Merge, Sheet, StripeMode, TableData } from "./types";
 
 export const PAD_X = 12;
 export const PAD_Y = 8;
@@ -18,11 +18,16 @@ export interface ResolvedCell {
   size: number;
 }
 
+export const stripeModeOf = (t: TableData): StripeMode => t.stripeMode ?? (t.stripe ? "rows" : "none");
+
 export function resolveCell(t: TableData, r: number, c: number): ResolvedCell {
   const st: CellStyle = t.style[keyOf(r, c)] ?? {};
   const head = r < t.headRows || c < t.headCols;
-  const stripe = t.stripe && !head && (r - t.headRows) % 2 === 1;
-  const bg = st.bg ?? (head ? t.headBg : stripe ? "#f1f5fb" : "#ffffff");
+  const mode = stripeModeOf(t);
+  const rb = (r - t.headRows) % 2 === 1,
+    cb = (c - t.headCols) % 2 === 1;
+  const stripe = !head && ((mode === "rows" && rb) || (mode === "cols" && cb) || (mode === "both" && rb !== cb));
+  const bg = st.bg ?? (head ? t.headBg : stripe ? t.stripeBg ?? "#f1f5fb" : "#ffffff");
   const color = st.color ?? contrastText(bg);
   return { bg, color, bold: st.bold ?? head, align: st.align ?? "c", size: st.size ?? t.fontSize };
 }
@@ -33,6 +38,8 @@ export const cellLineH = (size: number, rtl: boolean) => Math.round(size * (rtl 
 export interface TCell {
   r: number;
   c: number;
+  rs: number;
+  cs: number;
   x: number;
   y: number;
   w: number;
@@ -49,10 +56,26 @@ export interface TGeom {
   w: number;
   h: number;
   cells: TCell[];
+  colW: number[];
+  rowH: number[];
 }
 
-export function tableGeom(sheet: Sheet): TGeom {
+/** Peta gabungan sel: anchor "r,c" → Merge, dan himpunan sel yang tertutup. */
+export function mergeMaps(t: TableData) {
+  const anchors = new Map<string, Merge>();
+  const covered = new Set<string>();
+  for (const m of t.merges ?? []) {
+    if (m.r < 0 || m.c < 0 || m.r + m.rs > t.rows || m.c + m.cs > t.cols || (m.rs < 2 && m.cs < 2)) continue;
+    anchors.set(keyOf(m.r, m.c), m);
+    for (let r = m.r; r < m.r + m.rs; r++) for (let c = m.c; c < m.c + m.cs; c++) if (r !== m.r || c !== m.c) covered.add(keyOf(r, c));
+  }
+  return { anchors, covered };
+}
+
+/** Lebar kolom (px) yang dipakai: nilai tersimpan, atau otomatis menurut isi. */
+export function columnWidths(sheet: Sheet): number[] {
   const t = sheet.table!;
+  const { anchors, covered } = mergeMaps(t);
   const colW: number[] = [];
   for (let c = 0; c < t.cols; c++) {
     if (t.colW[c] > 0) {
@@ -61,6 +84,8 @@ export function tableGeom(sheet: Sheet): TGeom {
     }
     let m = 0;
     for (let r = 0; r < t.rows; r++) {
+      const k = keyOf(r, c);
+      if (covered.has(k) || (anchors.get(k)?.cs ?? 1) > 1) continue;
       const txt = t.cells[r]?.[c] ?? "";
       const res = resolveCell(t, r, c);
       const font = fontString(cellFontId(t, txt), res.bold ? 700 : 400, res.size);
@@ -68,22 +93,44 @@ export function tableGeom(sheet: Sheet): TGeom {
     }
     colW[c] = Math.min(320, Math.max(72, Math.ceil(m) + PAD_X * 2 + 4));
   }
-  const rowH: number[] = [];
+  return colW;
+}
+
+export function tableGeom(sheet: Sheet): TGeom {
+  const t = sheet.table!;
+  const { anchors, covered } = mergeMaps(t);
+  const colW = columnWidths(sheet);
+  const rowH: number[] = Array(t.rows).fill(40);
   const raw: TCell[] = [];
+  const pending: { r: number; rs: number; need: number }[] = [];
   for (let r = 0; r < t.rows; r++) {
     let h = 0;
     for (let c = 0; c < t.cols; c++) {
+      const key = keyOf(r, c);
+      if (covered.has(key)) continue;
+      const mg = anchors.get(key);
+      const rs = mg?.rs ?? 1,
+        cs = mg?.cs ?? 1;
+      let wsum = 0;
+      for (let k = c; k < c + cs; k++) wsum += colW[k];
       const txt = t.cells[r]?.[c] ?? "";
       const res = resolveCell(t, r, c);
       const id = cellFontId(t, txt);
       const rtl = isRtl(txt);
       const font = fontString(id, res.bold ? 700 : 400, res.size);
-      const lines = wrapCached(font, txt, colW[c] - PAD_X * 2);
+      const lines = wrapCached(font, txt, wsum - PAD_X * 2);
       const lineH = cellLineH(res.size, rtl);
-      h = Math.max(h, lines.length * lineH + PAD_Y * 2);
-      raw.push({ r, c, x: 0, y: 0, w: colW[c], h: 0, lines, font, fam: familyCss(id), rtl, lineH, res });
+      const need = lines.length * lineH + PAD_Y * 2;
+      if (rs === 1) h = Math.max(h, need);
+      else pending.push({ r, rs, need });
+      raw.push({ r, c, rs, cs, x: 0, y: 0, w: wsum, h: 0, lines, font, fam: familyCss(id), rtl, lineH, res });
     }
     rowH[r] = Math.max(h, 40);
+  }
+  for (const p of pending) {
+    let sum = 0;
+    for (let r = p.r; r < p.r + p.rs; r++) sum += rowH[r];
+    if (p.need > sum) rowH[p.r + p.rs - 1] += p.need - sum;
   }
   const total = colW.reduce((a, b) => a + b, 0);
   const xs: number[] = [];
@@ -100,11 +147,15 @@ export function tableGeom(sheet: Sheet): TGeom {
     ya += rowH[r];
   }
   for (const k of raw) {
-    k.x = xs[k.c];
+    let x0 = Infinity;
+    for (let c = k.c; c < k.c + k.cs; c++) x0 = Math.min(x0, xs[c]);
+    k.x = x0;
     k.y = ys[k.r];
-    k.h = rowH[k.r];
+    let h = 0;
+    for (let r = k.r; r < k.r + k.rs; r++) h += rowH[r];
+    k.h = h;
   }
-  return { w: total, h: ya, cells: raw };
+  return { w: total, h: ya, cells: raw, colW, rowH };
 }
 
 const textX = (k: TCell) => (k.res.align === "c" ? k.x + k.w / 2 : k.res.align === "l" ? k.x + PAD_X : k.x + k.w - PAD_X);
@@ -162,6 +213,7 @@ export const cloneTable = (t: TableData): TableData => ({
   cells: t.cells.map((r) => r.slice()),
   style: { ...t.style },
   colW: t.colW.slice(),
+  merges: t.merges?.map((m) => ({ ...m })),
 });
 
 export function blankTable(rows = 4, cols = 4): TableData {
@@ -190,7 +242,12 @@ export function normalizeTable(raw: any): TableData {
   const cols = Math.max(1, Math.min(40, raw.cols | 0 || 1));
   const cells = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => String(raw.cells?.[r]?.[c] ?? "")));
   const colW = Array.from({ length: cols }, (_, c) => Number(raw.colW?.[c]) || 0);
-  return { ...b, ...raw, rows, cols, cells, colW, style: raw.style && typeof raw.style === "object" ? raw.style : {} };
+  const merges: Merge[] = Array.isArray(raw.merges)
+    ? raw.merges
+        .map((m: any) => ({ r: m.r | 0, c: m.c | 0, rs: Math.max(1, m.rs | 0), cs: Math.max(1, m.cs | 0) }))
+        .filter((m: Merge) => m.r >= 0 && m.c >= 0 && m.r + m.rs <= rows && m.c + m.cs <= cols && (m.rs > 1 || m.cs > 1))
+    : [];
+  return { ...b, ...raw, rows, cols, cells, colW, merges, style: raw.style && typeof raw.style === "object" ? raw.style : {} };
 }
 
 const shiftKeys = (style: Record<string, CellStyle>, f: (r: number, c: number) => [number, number] | null) => {
@@ -203,20 +260,50 @@ const shiftKeys = (style: Record<string, CellStyle>, f: (r: number, c: number) =
   return out;
 };
 
+type Axis = "r" | "c";
+function adjMerges(ms: Merge[] | undefined, axis: Axis, kind: "ins" | "del", at: number): Merge[] {
+  const sk = axis === "r" ? "r" : "c",
+    lk = axis === "r" ? "rs" : "cs";
+  const out: Merge[] = [];
+  for (const m of ms ?? []) {
+    const n = { ...m };
+    const start = n[sk],
+      span = n[lk];
+    if (kind === "ins") {
+      if (start >= at) n[sk] = start + 1;
+      else if (start + span > at) n[lk] = span + 1;
+    } else if (start > at) n[sk] = start - 1;
+    else if (start === at) {
+      if (span <= 1) continue;
+      n[lk] = span - 1;
+    } else if (start + span > at) n[lk] = span - 1;
+    if (n.rs > 1 || n.cs > 1) out.push(n);
+  }
+  return out;
+}
+
 export function insertRow(t: TableData, at: number): TableData {
   const n = cloneTable(t);
   n.cells.splice(at, 0, Array(t.cols).fill(""));
   n.rows++;
   n.style = shiftKeys(t.style, (r, c) => [r >= at ? r + 1 : r, c]);
+  n.merges = adjMerges(t.merges, "r", "ins", at);
   return n;
 }
 export function deleteRow(t: TableData, at: number): TableData {
   if (t.rows <= 1) return t;
   const n = cloneTable(t);
+  const style = { ...t.style };
+  for (const m of t.merges ?? [])
+    if (m.r === at && m.rs > 1) {
+      n.cells[at + 1][m.c] = n.cells[at][m.c]; // isi sel gabungan pindah ke baris berikutnya
+      if (style[keyOf(at, m.c)]) style[keyOf(at + 1, m.c)] = style[keyOf(at, m.c)];
+    }
   n.cells.splice(at, 1);
   n.rows--;
   n.headRows = Math.min(n.headRows, n.rows);
-  n.style = shiftKeys(t.style, (r, c) => (r === at ? null : [r > at ? r - 1 : r, c]));
+  n.style = shiftKeys(style, (r, c) => (r === at ? null : [r > at ? r - 1 : r, c]));
+  n.merges = adjMerges(t.merges, "r", "del", at);
   return n;
 }
 export function insertCol(t: TableData, at: number): TableData {
@@ -225,18 +312,91 @@ export function insertCol(t: TableData, at: number): TableData {
   n.colW.splice(at, 0, 0);
   n.cols++;
   n.style = shiftKeys(t.style, (r, c) => [r, c >= at ? c + 1 : c]);
+  n.merges = adjMerges(t.merges, "c", "ins", at);
   return n;
 }
 export function deleteCol(t: TableData, at: number): TableData {
   if (t.cols <= 1) return t;
   const n = cloneTable(t);
+  const style = { ...t.style };
+  for (const m of t.merges ?? [])
+    if (m.c === at && m.cs > 1) {
+      n.cells[m.r][at + 1] = n.cells[m.r][at];
+      if (style[keyOf(m.r, at)]) style[keyOf(m.r, at + 1)] = style[keyOf(m.r, at)];
+    }
   n.cells.forEach((r) => r.splice(at, 1));
   n.colW.splice(at, 1);
   n.cols--;
   n.headCols = Math.min(n.headCols, n.cols);
-  n.style = shiftKeys(t.style, (r, c) => (c === at ? null : [r, c > at ? c - 1 : c]));
+  n.style = shiftKeys(style, (r, c) => (c === at ? null : [r, c > at ? c - 1 : c]));
+  n.merges = adjMerges(t.merges, "c", "del", at);
   return n;
 }
+
+// ---------------------------------------------------------------- gabung / pisah
+export interface Rect {
+  r0: number;
+  c0: number;
+  r1: number;
+  c1: number;
+}
+/** Lebarkan persegi agar tidak memotong gabungan sel yang sudah ada. */
+export function expandRect(t: TableData, R: Rect): Rect {
+  let q = { ...R };
+  for (let again = true; again; ) {
+    again = false;
+    for (const m of t.merges ?? []) {
+      const m1r = m.r + m.rs - 1,
+        m1c = m.c + m.cs - 1;
+      if (m.r > q.r1 || m1r < q.r0 || m.c > q.c1 || m1c < q.c0) continue;
+      const n = { r0: Math.min(q.r0, m.r), c0: Math.min(q.c0, m.c), r1: Math.max(q.r1, m1r), c1: Math.max(q.c1, m1c) };
+      if (n.r0 !== q.r0 || n.c0 !== q.c0 || n.r1 !== q.r1 || n.c1 !== q.c1) (q = n), (again = true);
+    }
+  }
+  return q;
+}
+export function mergeRect(t: TableData, R0: Rect): TableData {
+  const R = expandRect(t, R0);
+  if (R.r0 === R.r1 && R.c0 === R.c1) return t;
+  const n = cloneTable(t);
+  const parts: string[] = [];
+  for (let r = R.r0; r <= R.r1; r++)
+    for (let c = R.c0; c <= R.c1; c++) {
+      const v = (n.cells[r][c] ?? "").trim();
+      if (v) parts.push(v);
+      if (r !== R.r0 || c !== R.c0) n.cells[r][c] = "";
+    }
+  n.cells[R.r0][R.c0] = parts.join(" ");
+  n.merges = (n.merges ?? []).filter((m) => m.r > R.r1 || m.r + m.rs - 1 < R.r0 || m.c > R.c1 || m.c + m.cs - 1 < R.c0);
+  n.merges.push({ r: R.r0, c: R.c0, rs: R.r1 - R.r0 + 1, cs: R.c1 - R.c0 + 1 });
+  return n;
+}
+export function splitRect(t: TableData, R: Rect): TableData {
+  const n = cloneTable(t);
+  n.merges = (n.merges ?? []).filter((m) => m.r > R.r1 || m.r + m.rs - 1 < R.r0 || m.c > R.c1 || m.c + m.cs - 1 < R.c0);
+  return n;
+}
+export const hasMergeIn = (t: TableData, R: Rect) => (t.merges ?? []).some((m) => !(m.r > R.r1 || m.r + m.rs - 1 < R.r0 || m.c > R.c1 || m.c + m.cs - 1 < R.c0));
+
+// ---------------------------------------------------------------- gaya tabel (seperti Word)
+export interface TableStyle {
+  id: string;
+  name: string;
+  headBg: string;
+  stripeBg: string;
+  border: string;
+  mode: StripeMode;
+}
+export const TABLE_STYLES: TableStyle[] = [
+  { id: "biru", name: "Biru belang", headBg: "#2563eb", stripeBg: "#dbeafe", border: "#93c5fd", mode: "rows" },
+  { id: "hijau", name: "Hijau belang", headBg: "#0f766e", stripeBg: "#d1fae5", border: "#6ee7b7", mode: "rows" },
+  { id: "oranye", name: "Oranye belang", headBg: "#c2410c", stripeBg: "#ffedd5", border: "#fdba74", mode: "rows" },
+  { id: "ungu", name: "Ungu belang", headBg: "#6d28d9", stripeBg: "#ede9fe", border: "#c4b5fd", mode: "rows" },
+  { id: "abu", name: "Abu-abu", headBg: "#334155", stripeBg: "#e2e8f0", border: "#94a3b8", mode: "rows" },
+  { id: "kolom", name: "Kolom belang", headBg: "#be185d", stripeBg: "#fce7f3", border: "#f9a8d4", mode: "cols" },
+  { id: "catur", name: "Papan catur", headBg: "#1e293b", stripeBg: "#fef3c7", border: "#cbd5e1", mode: "both" },
+  { id: "polos", name: "Polos", headBg: "#475569", stripeBg: "#f1f5f9", border: "#94a3b8", mode: "none" },
+];
 
 export function ensureSize(t: TableData, rows: number, cols: number): TableData {
   let n = t;

@@ -110,6 +110,14 @@ export interface CellStyle {
 }
 
 /** Lembar bertipe tabel (mis. tashrif). Sel diindeks [baris][kolom] secara logis; bila `rtl`, kolom 0 tampil di kanan. */
+export interface Merge {
+  r: number;
+  c: number;
+  rs: number;
+  cs: number;
+}
+export type StripeMode = "none" | "rows" | "cols" | "both";
+
 export interface TableData {
   rows: number;
   cols: number;
@@ -123,7 +131,10 @@ export interface TableData {
   arFont: string; // untuk teks Arab
   fontSize: number;
   headBg: string;
-  stripe: boolean;
+  stripe: boolean; // lama: setara stripeMode "rows"
+  stripeMode?: StripeMode;
+  stripeBg?: string;
+  merges?: Merge[];
   border: string;
 }
 
