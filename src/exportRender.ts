@@ -254,7 +254,7 @@ export async function drawContent(ctx: CanvasRenderingContext2D, sheet: Sheet, l
           ctx.save();
           ctx.clip(fp);
           ctx.strokeStyle = st.patternColor;
-          ctx.lineWidth = 1.8;
+          ctx.lineWidth = 1.5;
           ctx.lineCap = "round";
           ctx.stroke(new Path2D(g.hatch));
           ctx.restore();
@@ -264,8 +264,9 @@ export async function drawContent(ctx: CanvasRenderingContext2D, sheet: Sheet, l
           if (st.dash) ctx.setLineDash([7, 5]);
           ctx.lineWidth = st.strokeWidth;
           ctx.stroke(new Path2D(g.outline));
-          ctx.globalAlpha = 0.75;
-          ctx.lineWidth = Math.max(1, st.strokeWidth * 0.7);
+          ctx.globalAlpha = 0.9;
+          ctx.lineCap = "round";
+          ctx.lineWidth = Math.max(1.2, st.strokeWidth * 0.9);
           ctx.stroke(new Path2D(g.outline2));
           ctx.setLineDash([]);
         }
@@ -497,10 +498,10 @@ export async function renderSvg(sheet: Sheet, o: ExportOpts, title?: string): Pr
       const g = sketchGeom(id, st.pattern, st.shape, ln.w, ln.h, radiusFor(st.shape, ln.h));
       const cid = "skc-" + id.replace(/[^a-z0-9]/gi, "");
       P.push(`<path d="${g.fill}" fill="${st.fill}"/>`);
-      if (g.hatch) P.push(`<clipPath id="${cid}"><path d="${g.fill}"/></clipPath><path d="${g.hatch}" clip-path="url(#${cid})" fill="none" stroke="${st.patternColor}" stroke-width="1.8" stroke-linecap="round"/>`);
+      if (g.hatch) P.push(`<clipPath id="${cid}"><path d="${g.fill}"/></clipPath><path d="${g.hatch}" clip-path="url(#${cid})" fill="none" stroke="${st.patternColor}" stroke-width="1.5" stroke-linecap="round"/>`);
       const da = st.dash ? ` stroke-dasharray="${st.dash}"` : "";
       if (st.stroke !== "none")
-        P.push(`<path d="${g.outline}" fill="none" stroke="${st.stroke}" stroke-width="${st.strokeWidth}"${da}/><path d="${g.outline2}" fill="none" stroke="${st.stroke}" stroke-width="${Math.max(1, st.strokeWidth * 0.7)}" opacity="0.75"${da}/>`);
+        P.push(`<path d="${g.outline}" fill="none" stroke="${st.stroke}" stroke-width="${st.strokeWidth}"${da}/><path d="${g.outline2}" fill="none" stroke="${st.stroke}" stroke-width="${Math.max(1.2, st.strokeWidth * 0.9)}" stroke-linecap="round" opacity="0.9"${da}/>`);
     } else if (st.shape !== "none") {
       P.push(shapeEl(`fill="${st.fill}"`));
       if (st.pattern && !isSketch(st.pattern)) P.push(shapeEl(`fill="url(#pt-${st.pattern}-${st.patternColor.replace(/[^a-z0-9]/gi, "")})"`));

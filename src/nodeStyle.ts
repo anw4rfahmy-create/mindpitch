@@ -115,7 +115,15 @@ export function styleFor(sheet: Sheet, n: MNode, depth: number): NodeStyle {
     }
     const dark = contrastText(fill) === "#ffffff";
     const sk = isSketch(pattern);
-    patternColor = dark
+    // gaya sketsa ala XMind: topik berisi warna cabang padat, coretannya putih tipis
+    if (sk && depth > 0 && !n.color && /^#?f{6}$/i.test(fill.replace("#", ""))) {
+      fill = branch;
+      stroke = branch;
+      text = contrastText(fill);
+    }
+    const whiteFill = /^#?f{6}$/i.test(fill.replace("#", ""));
+    if (sk && !whiteFill) patternColor = "rgba(255,255,255,0.5)";
+    else patternColor = dark
       ? `rgba(255,255,255,${sk ? 0.55 : 0.42})`
       : stroke === fill || stroke === "none"
       ? `rgba(0,0,0,${sk ? 0.3 : 0.22})`
