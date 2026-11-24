@@ -16,6 +16,7 @@ export interface ResolvedCell {
   bold: boolean;
   align: "l" | "c" | "r";
   size: number;
+  diag?: "down" | "up" | "both";
 }
 
 export const stripeModeOf = (t: TableData): StripeMode => t.stripeMode ?? (t.stripe ? "rows" : "none");
@@ -29,7 +30,7 @@ export function resolveCell(t: TableData, r: number, c: number): ResolvedCell {
   const stripe = !head && ((mode === "rows" && rb) || (mode === "cols" && cb) || (mode === "both" && rb !== cb));
   const bg = st.bg ?? (head ? t.headBg : stripe ? t.stripeBg ?? "#f1f5fb" : "#ffffff");
   const color = st.color ?? contrastText(bg);
-  return { bg, color, bold: st.bold ?? head, align: st.align ?? "c", size: st.size ?? t.fontSize };
+  return { bg, color, bold: st.bold ?? head, align: st.align ?? "c", size: st.size ?? t.fontSize, diag: st.diag };
 }
 
 export const cellFontId = (t: TableData, text: string) => (isRtl(text) ? t.arFont : t.font);
@@ -175,6 +176,13 @@ export function drawTable(ctx: CanvasRenderingContext2D, sheet: Sheet) {
   ctx.lineWidth = 1.2;
   ctx.lineJoin = "miter";
   for (const k of g.cells) ctx.strokeRect(k.x, k.y, k.w, k.h);
+  for (const k of g.cells) {
+    if (!k.res.diag) continue;
+    ctx.beginPath();
+    if (k.res.diag !== "up") (ctx.moveTo(k.x, k.y), ctx.lineTo(k.x + k.w, k.y + k.h));
+    if (k.res.diag !== "down") (ctx.moveTo(k.x, k.y + k.h), ctx.lineTo(k.x + k.w, k.y));
+    ctx.stroke();
+  }
   ctx.lineWidth = 2.4;
   ctx.strokeRect(0, 0, g.w, g.h);
   ctx.textBaseline = "middle";
@@ -194,6 +202,10 @@ export function tableSvg(sheet: Sheet): string {
   const g = tableGeom(sheet);
   const P: string[] = [];
   for (const k of g.cells) P.push(`<rect x="${k.x}" y="${k.y}" width="${k.w}" height="${k.h}" fill="${k.res.bg}" stroke="${t.border}" stroke-width="1.2"/>`);
+  for (const k of g.cells) {
+    if (k.res.diag && k.res.diag !== "up") P.push(`<line x1="${k.x}" y1="${k.y}" x2="${k.x + k.w}" y2="${k.y + k.h}" stroke="${t.border}" stroke-width="1.2"/>`);
+    if (k.res.diag && k.res.diag !== "down") P.push(`<line x1="${k.x}" y1="${k.y + k.h}" x2="${k.x + k.w}" y2="${k.y}" stroke="${t.border}" stroke-width="1.2"/>`);
+  }
   P.push(`<rect width="${g.w}" height="${g.h}" fill="none" stroke="${t.border}" stroke-width="2.4"/>`);
   for (const k of g.cells) {
     const anchor = k.res.align === "c" ? "middle" : k.res.align === "l" ? "start" : "end";

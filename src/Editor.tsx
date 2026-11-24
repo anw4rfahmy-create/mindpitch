@@ -648,7 +648,7 @@ export default function Editor({ initial, onBack }: Props) {
         </button>
         {!sheet.table && (
           <button className={"btn" + (showOutline ? " active" : "")} onClick={() => setShowOutline((v) => !v)}>
-            ☰ <span className="hide-sm">Outline</span>
+            ☰ <span className="hide-sm">Kerangka</span>
           </button>
         )}
         {sheet.table ? (

@@ -108,6 +108,7 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
   const [tick, setTick] = useState(0);
   const [live, setLive] = useState<number[] | null>(null);
   const [pickMode, setPickMode] = useState(false);
+  const [menu, setMenu] = useState<string | null>(null);
   const origin = useRef<{ r: number; c: number }>({ r: 0, c: 0 });
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(zoom);
@@ -305,6 +306,33 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
     setSel({ kind: "cell", r, c });
   };
   const picked = useRef(false);
+  const startDrag = (e: React.PointerEvent) => {
+    if (e.pointerType !== "mouse" || e.button !== 0 || e.shiftKey || pickMode) return;
+    const td0 = (e.target as HTMLElement).closest("td[data-rc]") as HTMLElement | null;
+    if (!td0) return;
+    const [r0, c0] = td0.dataset.rc!.split(",").map(Number);
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("td[data-rc]") as HTMLElement | null;
+      if (!el) return;
+      const [r, c] = el.dataset.rc!.split(",").map(Number);
+      if (!moved && r === r0 && c === c0) return;
+      if (!moved) {
+        moved = true;
+        (document.activeElement as HTMLElement | null)?.blur();
+        document.body.classList.add("tbl-selecting");
+      }
+      origin.current = { r: r0, c: c0 };
+      setSel({ kind: "range", r: r0, c: c0, r2: r, c2: c });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.classList.remove("tbl-selecting");
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
   const R = rectOf(sel, t);
   const area = (R.r1 - R.r0 + 1) * (R.c1 - R.c0 + 1);
@@ -315,6 +343,12 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
   const colSel = sel.kind === "cell" || sel.kind === "col" || sel.kind === "range" ? Math.min(sel.c, sel.c2 ?? sel.c) : 0;
   const rowsSel = sel.kind === "col" ? 0 : Math.min(ar, sel.r2 ?? ar);
   const mode = stripeModeOf(t);
+  const act = (fn: () => void) => () => (fn(), setMenu(null));
+  const mbtn = (id: string, label: string) => (
+    <button className={"btn small" + (menu === id ? " active" : "")} onClick={() => setMenu(menu === id ? null : id)}>
+      {label} ▾
+    </button>
+  );
   const activeKeys = new Set(cellsOf(sel, t).map(([a, b]) => keyOf(a, b)));
 
   return (
@@ -331,117 +365,176 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
         <div className="spacer" />
         <button className="btn primary small" onClick={onPresent}>▶ Tampilkan bertahap</button>
       </div>
-      <div className="tbl-bar" hidden={!tools}>
-        <div className="tbl-group">
-          <span className="tbl-label">Baris</span>
-          <button className="btn small" onClick={() => onChange((x) => insertRow(x, rowsSel))} title="Sisipkan baris di atas">＋▲</button>
-          <button className="btn small" onClick={() => onChange((x) => insertRow(x, R.r1 + 1))} title="Sisipkan baris di bawah">＋▼</button>
-          <button className="btn small danger" onClick={() => onChange((x) => deleteRow(x, rowsSel))} title="Hapus baris">✕</button>
-        </div>
-        <div className="tbl-group">
-          <span className="tbl-label">Kolom</span>
-          <button className="btn small" onClick={() => onChange((x) => insertCol(x, x.rtl ? R.c1 + 1 : colSel))} title="Sisipkan kolom di kiri">◀＋</button>
-          <button className="btn small" onClick={() => onChange((x) => insertCol(x, x.rtl ? colSel : R.c1 + 1))} title="Sisipkan kolom di kanan">＋▶</button>
-          <button className="btn small danger" onClick={() => onChange((x) => deleteCol(x, colSel))} title="Hapus kolom">✕</button>
-          <button className="btn small" onClick={() => nudgeCol(colSel, 1 / 1.15)} title="Sempitkan kolom terpilih">↔−</button>
-          <span className="small muted">kol {colSel + 1}</span>
-          <button className="btn small" onClick={() => nudgeCol(colSel, 1.15)} title="Lebarkan kolom terpilih">↔＋</button>
-          <button className="btn small" onClick={() => onChange((x) => ({ ...x, colW: Array(x.cols).fill(0) }))} title="Kembalikan lebar semua kolom ke otomatis">Lebar otomatis</button>
-        </div>
-        <div className="tbl-group">
-          <span className="tbl-label">Gabung</span>
-          <button className={"btn small" + (pickMode ? " active" : "")} onClick={() => ((picked.current = false), setPickMode((v) => !v))} title="Mode pilih rentang sel: ketuk sel awal, lalu sel akhir (di komputer: klik sel lalu Shift+klik)">
-            ⬚ Pilih rentang
-          </button>
-          <button className="btn small" disabled={!canMerge} onClick={() => (onChange((x) => mergeRect(x, R)), setSel({ kind: "cell", r: expandRect(t, R).r0, c: expandRect(t, R).c0 }))} title="Gabungkan sel terpilih">
-            ⊞ Gabung
-          </button>
-          <button className="btn small" disabled={!canSplit} onClick={() => onChange((x) => splitRect(x, R))} title="Pisahkan sel gabungan">
-            ⊟ Pisah
-          </button>
-        </div>
-        <div className="tbl-group">
-          <span className="tbl-label">Header</span>
-          <button className="btn small" onClick={() => set({ headRows: Math.max(0, t.headRows - 1) })}>−</button>
-          <span className="small">{t.headRows} baris</span>
-          <button className="btn small" onClick={() => set({ headRows: Math.min(t.rows, t.headRows + 1) })}>＋</button>
-          <button className="btn small" onClick={() => set({ headCols: Math.max(0, t.headCols - 1) })}>−</button>
-          <span className="small">{t.headCols} kolom</span>
-          <button className="btn small" onClick={() => set({ headCols: Math.min(t.cols, t.headCols + 1) })}>＋</button>
-          {HEAD.map((h) => (
-            <button key={h} className={"swatch" + (t.headBg === h ? " on" : "")} style={{ background: h }} onClick={() => set({ headBg: h })} aria-label={h} />
-          ))}
-        </div>
-        <div className="tbl-group">
-          <span className="tbl-label">Gaya</span>
-          <select className="small" value="" onChange={(e) => {
-            const st = TABLE_STYLES.find((x) => x.id === e.target.value);
-            if (st) set({ headBg: st.headBg, stripeBg: st.stripeBg, border: st.border, stripeMode: st.mode, stripe: st.mode !== "none" });
-          }} title="Gaya tabel siap pakai">
-            <option value="">Gaya tabel…</option>
-            {TABLE_STYLES.map((x) => (
-              <option key={x.id} value={x.id}>{x.name}</option>
-            ))}
-          </select>
-          <select className="small" value={mode} onChange={(e) => set({ stripeMode: e.target.value as StripeMode, stripe: e.target.value !== "none" })} title="Warna belang-belang">
-            <option value="none">Tanpa belang</option>
-            <option value="rows">Baris belang</option>
-            <option value="cols">Kolom belang</option>
-            <option value="both">Papan catur</option>
-          </select>
-          {["#f1f5fb", "#dbeafe", "#d1fae5", "#fef3c7", "#ffedd5", "#fce7f3", "#ede9fe", "#e2e8f0"].map((h) => (
-            <button key={h} className={"swatch" + ((t.stripeBg ?? "#f1f5fb") === h ? " on" : "")} style={{ background: h }} onClick={() => set({ stripeBg: h, ...(mode === "none" ? { stripeMode: "rows" as StripeMode, stripe: true } : {}) })} aria-label={"warna belang " + h} title="Warna belang" />
-          ))}
-        </div>
-        <div className="tbl-group">
-          <button className={"btn small" + (t.rtl ? " active" : "")} onClick={() => set({ rtl: !t.rtl })} title="Arah tabel: kolom pertama di kanan (Arab) atau di kiri">
-            {t.rtl ? "⇠ Arab (kanan→kiri)" : "⇢ Latin (kiri→kanan)"}
-          </button>
-          <button className="btn small" onClick={() => set({ fontSize: Math.max(10, t.fontSize - 2) })} title="Perkecil huruf">A−</button>
-          <button className="btn small" onClick={() => set({ fontSize: Math.min(60, t.fontSize + 2) })} title="Perbesar huruf">A＋</button>
-          <select className="small" value={t.arFont} onChange={(e) => set({ arFont: e.target.value })} title="Font Arab">
-            {FONTS.filter((f) => f.group === "Arab").map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-          </select>
-          <select className="small" value={t.font} onChange={(e) => set({ font: e.target.value })} title="Font Indonesia/Latin">
-            {FONTS.filter((f) => f.group !== "Arab").map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="tbl-group">
-          <span className="tbl-label">{sel.kind === "cell" ? "Sel" : sel.kind === "row" ? "Baris" : sel.kind === "col" ? "Kolom" : sel.kind === "range" ? "Rentang" : "Semua"}</span>
-          {BG.map((h) => (
-            <button key={h} className="swatch" style={{ background: h }} onClick={() => style({ bg: h })} aria-label={"isi " + h} />
-          ))}
-          <button className="swatch reset" onClick={() => style({ bg: undefined })} title="Isi otomatis">⟲</button>
-          {FG.map((h) => (
-            <button key={h} className="swatch txt" style={{ color: h, background: h === "#ffffff" ? "#64748b" : "#fff" }} onClick={() => style({ color: h })} aria-label={"teks " + h}>A</button>
-          ))}
-          <button className="btn small" onClick={() => style({ bold: true })}><b>B</b></button>
-          <button className="btn small" onClick={() => style({ bold: false })}>b</button>
-          <button className="btn small" onClick={() => style({ align: "l" })} title="Rata kiri">⇤</button>
-          <button className="btn small" onClick={() => style({ align: "c" })} title="Tengah">≡</button>
-          <button className="btn small" onClick={() => style({ align: "r" })} title="Rata kanan">⇥</button>
-          <button className="btn small" onClick={() => style({ size: t.fontSize + 4 })} title="Huruf sel lebih besar">▲</button>
-          <button className="btn small" onClick={() => style({ size: Math.max(9, t.fontSize - 4) })} title="Huruf sel lebih kecil">▼</button>
-          <button className="btn small" onClick={() => style({ size: undefined, bold: undefined, align: undefined, color: undefined })} title="Reset gaya sel">⟲</button>
-        </div>
-      </div>
-      {pickMode && (
-        <div className="tbl-hint small" style={{ background: "#eef2ff", color: "#3730a3" }}>
-          Mode rentang: ketuk sel awal, lalu sel akhir. Setelah terpilih, tekan <b>⊞ Gabung</b>. (Komputer: klik sel, lalu Shift+klik sel lain.)
+      {tools && (
+        <div className="tbl-bar">
+          <div className="tbl-row">
+            {mbtn("ins", "Sisipkan")}
+            {mbtn("del", "Hapus")}
+            <span className="tbl-sep" />
+            <button className="btn small" disabled={!canMerge} onClick={() => (onChange((x) => mergeRect(x, R)), setSel({ kind: "cell", r: expandRect(t, R).r0, c: expandRect(t, R).c0 }), setMenu(null))} title="Gabungkan sel yang dipilih menjadi satu">
+              ⊞ Gabungkan sel
+            </button>
+            <button className="btn small" disabled={!canSplit} onClick={() => (onChange((x) => splitRect(x, R)), setMenu(null))} title="Pisahkan sel gabungan">
+              ⊟ Pisahkan sel
+            </button>
+            <button className={"btn small" + (pickMode ? " active" : "")} onClick={() => ((picked.current = false), setPickMode((v) => !v))} title="Pilih beberapa sel dengan mengetuk sel awal lalu sel akhir (untuk layar sentuh)">
+              ⬚ Pilih sel
+            </button>
+            <span className="tbl-sep" />
+            {mbtn("diag", "Diagonal")}
+            {mbtn("style", "Gaya tabel")}
+            {mbtn("color", "Warna")}
+            {mbtn("text", "Teks")}
+            {mbtn("more", "Lainnya")}
+          </div>
+          {menu && (
+            <div className="tbl-menu">
+              {menu === "ins" && (
+                <div className="tbl-list">
+                  <button className="btn small" onClick={act(() => onChange((x) => insertRow(x, rowsSel)))}>Baris di atas</button>
+                  <button className="btn small" onClick={act(() => onChange((x) => insertRow(x, R.r1 + 1)))}>Baris di bawah</button>
+                  <button className="btn small" onClick={act(() => onChange((x) => insertCol(x, x.rtl ? R.c1 + 1 : colSel)))}>Kolom di kiri</button>
+                  <button className="btn small" onClick={act(() => onChange((x) => insertCol(x, x.rtl ? colSel : R.c1 + 1)))}>Kolom di kanan</button>
+                </div>
+              )}
+              {menu === "del" && (
+                <div className="tbl-list">
+                  <button className="btn small danger" onClick={act(() => onChange((x) => deleteRow(x, rowsSel)))}>Hapus baris</button>
+                  <button className="btn small danger" onClick={act(() => onChange((x) => deleteCol(x, colSel)))}>Hapus kolom</button>
+                </div>
+              )}
+              {menu === "diag" && (
+                <div className="tbl-list">
+                  <button className="btn small" onClick={act(() => style({ diag: "down" }))}>╲ Garis turun</button>
+                  <button className="btn small" onClick={act(() => style({ diag: "up" }))}>╱ Garis naik</button>
+                  <button className="btn small" onClick={act(() => style({ diag: "both" }))}>╳ Silang</button>
+                  <button className="btn small" onClick={act(() => style({ diag: undefined }))}>Tanpa diagonal</button>
+                </div>
+              )}
+              {menu === "style" && (
+                <div className="tbl-list">
+                  <label className="tbl-field">Gaya
+                    <select value="" onChange={(e) => {
+                      const st = TABLE_STYLES.find((x) => x.id === e.target.value);
+                      if (st) set({ headBg: st.headBg, stripeBg: st.stripeBg, border: st.border, stripeMode: st.mode, stripe: st.mode !== "none" });
+                    }}>
+                      <option value="">Pilih gaya…</option>
+                      {TABLE_STYLES.map((x) => (
+                        <option key={x.id} value={x.id}>{x.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="tbl-field">Belang
+                    <select value={mode} onChange={(e) => set({ stripeMode: e.target.value as StripeMode, stripe: e.target.value !== "none" })}>
+                      <option value="none">Tanpa belang</option>
+                      <option value="rows">Baris belang</option>
+                      <option value="cols">Kolom belang</option>
+                      <option value="both">Papan catur</option>
+                    </select>
+                  </label>
+                  <div className="tbl-field">Warna belang
+                    <span className="tbl-sw">
+                      {["#f1f5fb", "#dbeafe", "#d1fae5", "#fef3c7", "#ffedd5", "#fce7f3", "#ede9fe", "#e2e8f0"].map((h) => (
+                        <button key={h} className={"swatch" + ((t.stripeBg ?? "#f1f5fb") === h ? " on" : "")} style={{ background: h }} onClick={() => set({ stripeBg: h, ...(mode === "none" ? { stripeMode: "rows" as StripeMode, stripe: true } : {}) })} aria-label={"warna belang " + h} />
+                      ))}
+                    </span>
+                  </div>
+                  <div className="tbl-field">Warna judul
+                    <span className="tbl-sw">
+                      {HEAD.map((h) => (
+                        <button key={h} className={"swatch" + (t.headBg === h ? " on" : "")} style={{ background: h }} onClick={() => set({ headBg: h })} aria-label={"warna judul " + h} />
+                      ))}
+                    </span>
+                  </div>
+                  <div className="tbl-field">Baris judul
+                    <button className="btn small" onClick={() => set({ headRows: Math.max(0, t.headRows - 1) })}>−</button>
+                    <b>{t.headRows}</b>
+                    <button className="btn small" onClick={() => set({ headRows: Math.min(t.rows, t.headRows + 1) })}>＋</button>
+                  </div>
+                  <div className="tbl-field">Kolom judul
+                    <button className="btn small" onClick={() => set({ headCols: Math.max(0, t.headCols - 1) })}>−</button>
+                    <b>{t.headCols}</b>
+                    <button className="btn small" onClick={() => set({ headCols: Math.min(t.cols, t.headCols + 1) })}>＋</button>
+                  </div>
+                </div>
+              )}
+              {menu === "color" && (
+                <div className="tbl-list">
+                  <div className="tbl-field">Warna isi sel
+                    <span className="tbl-sw">
+                      {BG.map((h) => (
+                        <button key={h} className="swatch" style={{ background: h }} onClick={() => style({ bg: h })} aria-label={"isi " + h} />
+                      ))}
+                      <button className="swatch reset" onClick={() => style({ bg: undefined })} title="Isi otomatis">⟲</button>
+                    </span>
+                  </div>
+                  <div className="tbl-field">Warna huruf
+                    <span className="tbl-sw">
+                      {FG.map((h) => (
+                        <button key={h} className="swatch txt" style={{ color: h, background: h === "#ffffff" ? "#64748b" : "#fff" }} onClick={() => style({ color: h })} aria-label={"huruf " + h}>A</button>
+                      ))}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {menu === "text" && (
+                <div className="tbl-list">
+                  <button className="btn small" onClick={() => style({ bold: true })}><b>Tebal</b></button>
+                  <button className="btn small" onClick={() => style({ bold: false })}>Normal</button>
+                  <button className="btn small" onClick={() => style({ align: "l" })}>⇤ Rata kiri</button>
+                  <button className="btn small" onClick={() => style({ align: "c" })}>≡ Tengah</button>
+                  <button className="btn small" onClick={() => style({ align: "r" })}>⇥ Rata kanan</button>
+                  <button className="btn small" onClick={() => style({ size: t.fontSize + 4 })}>A＋ Besar</button>
+                  <button className="btn small" onClick={() => style({ size: Math.max(9, t.fontSize - 4) })}>A− Kecil</button>
+                  <button className="btn small" onClick={act(() => style({ size: undefined, bold: undefined, align: undefined, color: undefined, bg: undefined, diag: undefined }))}>Hapus format sel</button>
+                </div>
+              )}
+              {menu === "more" && (
+                <div className="tbl-list">
+                  <div className="tbl-field">Lebar kolom {colSel + 1}
+                    <button className="btn small" onClick={() => nudgeCol(colSel, 1 / 1.15)}>Sempit</button>
+                    <button className="btn small" onClick={() => nudgeCol(colSel, 1.15)}>Lebar</button>
+                    <button className="btn small" onClick={act(() => onChange((x) => ({ ...x, colW: Array(x.cols).fill(0) })))}>Otomatis</button>
+                  </div>
+                  <button className={"btn small" + (t.rtl ? " active" : "")} onClick={() => set({ rtl: !t.rtl })}>
+                    {t.rtl ? "⇠ Arah: Arab (kanan→kiri)" : "⇢ Arah: Latin (kiri→kanan)"}
+                  </button>
+                  <div className="tbl-field">Ukuran huruf
+                    <button className="btn small" onClick={() => set({ fontSize: Math.max(10, t.fontSize - 2) })}>A−</button>
+                    <b>{t.fontSize}</b>
+                    <button className="btn small" onClick={() => set({ fontSize: Math.min(60, t.fontSize + 2) })}>A＋</button>
+                  </div>
+                  <label className="tbl-field">Font Arab
+                    <select value={t.arFont} onChange={(e) => set({ arFont: e.target.value })}>
+                      {FONTS.filter((f) => f.group === "Arab").map((f) => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="tbl-field">Font Latin
+                    <select value={t.font} onChange={(e) => set({ font: e.target.value })}>
+                      {FONTS.filter((f) => f.group !== "Arab").map((f) => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
-      <div className="tbl-hint small muted" hidden={!tools}>
-        Ketik langsung di sel · <kbd>Enter</kbd> turun · <kbd>Tab</kbd> ke sel berikut · <kbd>Shift</kbd>+<kbd>Enter</kbd> baris baru dalam sel · tempel (Ctrl+V) tabel dari Word/Excel akan mengisi banyak sel sekaligus · klik nomor baris/kolom untuk memilihnya.
-      </div>
+      {pickMode && (
+        <div className="tbl-hint small" style={{ background: "#eef2ff", color: "#3730a3" }}>
+          Ketuk sel awal, lalu sel akhir, kemudian tekan <b>Gabungkan sel</b>.
+        </div>
+      )}
       <div className="tbl-scroll" ref={scrollEl}>
         <div className="tbl-canvas" style={{ width: (natW + 34) * zoom + 8, height: th * zoom + 100 }}>
           <table
             ref={tblEl}
             className="tbl"
+            onPointerDown={startDrag}
             dir={t.rtl ? "rtl" : "ltr"}
             style={{ position: "absolute", top: 4, [t.rtl ? "right" : "left"]: 34 * zoom, width: natW, tableLayout: "fixed", transform: `scale(${zoom})`, transformOrigin: t.rtl ? "top right" : "top left" }}
           >
@@ -473,7 +566,16 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
                     if (covered.has(key)) return null;
                     const mg = anchors.get(key);
                     return (
-                      <td key={c} rowSpan={mg?.rs} colSpan={mg?.cs} style={{ background: resolveCell(t, r, c).bg }} onPointerDown={(e) => e.target === e.currentTarget && !pickMode && (e.preventDefault(), focusCell(r, c))}>
+                      <td key={c} data-rc={`${r},${c}`} rowSpan={mg?.rs} colSpan={mg?.cs} style={{ background: resolveCell(t, r, c).bg }} onPointerDown={(e) => e.target === e.currentTarget && !pickMode && (e.preventDefault(), focusCell(r, c))}>
+                        {(() => {
+                          const dg = resolveCell(t, r, c).diag;
+                          return dg ? (
+                            <svg className="diag" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              {(dg === "down" || dg === "both") && <line x1="0" y1="0" x2="100" y2="100" />}
+                              {(dg === "up" || dg === "both") && <line x1="0" y1="100" x2="100" y2="0" />}
+                            </svg>
+                          ) : null;
+                        })()}
                         <Cell
                           t={t}
                           r={r}

@@ -215,7 +215,7 @@ export default function ExportDialog({ wb, sheet, onClose, onDone }: Props) {
                 </button>
               </>
             )}
-            {fmt === "md" && <p className="muted small">Outline berindentasi (Markdown) dari lembar yang sedang dibuka.</p>}
+            {fmt === "md" && <p className="muted small">Kerangka berindentasi (Markdown) dari lembar yang sedang dibuka.</p>}
           </div>
 
           <div className="export-preview">

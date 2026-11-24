@@ -123,8 +123,15 @@ export default function TablePresenter({ sheet, onClose }: { sheet: Sheet; onClo
                         lineHeight: cellLineH(res.size, rtl) + "px",
                         textAlign: res.align === "c" ? "center" : res.align === "l" ? "left" : "right",
                         transition: "background .4s, color .25s",
+                        position: "relative",
                       }}
                     >
+                      {res.diag && (
+                        <svg className="diag" viewBox="0 0 100 100" preserveAspectRatio="none">
+                          {res.diag !== "up" && <line x1="0" y1="0" x2="100" y2="100" />}
+                          {res.diag !== "down" && <line x1="0" y1="100" x2="100" y2="0" />}
+                        </svg>
+                      )}
                       {txt.split("\n").map((l, i) => (
                         <div key={i} dir="auto">{l || " "}</div>
                       ))}

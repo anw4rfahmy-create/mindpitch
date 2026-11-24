@@ -165,7 +165,7 @@ export default function FormatPanel(p: Props) {
           <h4>Mouse / sentuh</h4>
           <table className="keytable"><tbody>
             <tr><td>Seret kanvas</td><td>Geser peta</td></tr>
-            <tr><td>Roda mouse / cubit</td><td>Zoom</td></tr>
+            <tr><td>Roda mouse / cubit</td><td>Perbesar / perkecil</td></tr>
             <tr><td>Seret topik ke topik lain</td><td>Pindahkan topik</td></tr>
             <tr><td>Ketuk dua kali</td><td>Ubah teks</td></tr>
           </tbody></table>
@@ -188,7 +188,7 @@ export default function FormatPanel(p: Props) {
           <ul>
             <li><b>←</b> kembali ke beranda (otomatis tersimpan)</li>
             <li><b>↶ ↷</b> urungkan / ulangi</li>
-            <li><b>☰ Outline</b> edit sebagai daftar berindentasi</li>
+            <li><b>☰ Kerangka</b> edit sebagai daftar berindentasi</li>
             <li><b>🎨 Format</b> panel ini: Topik, Peta, Panduan</li>
             <li><b>⬇ Ekspor</b> PDF, PNG, SVG (pilih ukuran &amp; bingkai), format lintas aplikasi, Map It, Markdown</li>
             <li><b>🎬 Presentasi</b> tampil per langkah &amp; ekspor video</li>
