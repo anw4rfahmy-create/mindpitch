@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ensureFonts, familyCss, FONTS, isRtl } from "./fonts";
-import { cellFontId, cellLineH, cloneTable, columnWidths, deleteCol, deleteRow, expandRect, hasMergeIn, insertCol, insertRow, keyOf, mergeMaps, mergeRect, pasteGrid, Rect, resolveCell, splitRect, stripeModeOf, TABLE_STYLES, tableGeom } from "./table";
+import { applyTableStyle, cellFontId, cellLineH, cloneTable, columnWidths, deleteCol, deleteRow, expandRect, HEAD_KINDS, hasMergeIn, HeadKind, insertCol, insertRow, keyOf, mergeMaps, mergeRect, pasteGrid, Rect, isSplit, resolveCell, splitRect, stripeModeOf, TABLE_STYLES, tableGeom } from "./table";
 import { CellStyle, Sheet, StripeMode, TableData } from "./types";
 
-type Sel = { kind: "cell" | "row" | "col" | "all" | "range"; r: number; c: number; r2?: number; c2?: number };
+type Sel = { kind: "cell" | "row" | "col" | "all" | "range" | "multi"; r: number; c: number; r2?: number; c2?: number; keys?: string[] };
+type PickMode = false | "range" | "multi";
 
 interface Props {
   sheet: Sheet;
@@ -30,6 +31,10 @@ function cellsOf(sel: Sel, t: TableData): [number, number][] {
   const out: [number, number][] = [];
   for (let r = 0; r < t.rows; r++)
     for (let c = 0; c < t.cols; c++) {
+      if (sel.kind === "multi") {
+        if (sel.keys?.includes(keyOf(r, c))) out.push([r, c]);
+        continue;
+      }
       if (sel.kind === "range") {
         const R = rectOf(sel, t);
         if (r >= R.r0 && r <= R.r1 && c >= R.c0 && c <= R.c1) out.push([r, c]);
@@ -51,7 +56,8 @@ function Cell(p: {
   onKey(e: React.KeyboardEvent<HTMLTextAreaElement>): void;
   onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>): void;
   pick?: boolean;
-  onPick?(shift: boolean): void;
+  onPick?(shift: boolean, ctrl: boolean): void;
+  onSub?(v: string): void;
 }) {
   const { t, r, c } = p;
   const text = t.cells[r]?.[c] ?? "";
@@ -67,6 +73,63 @@ function Cell(p: {
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
   }, [v, res.size, t.colW[c], p.tick, t.arFont, t.font, res.bold]);
+  const split = isSplit(res);
+  const subText = res.sub ?? "";
+  const [sv, setSv] = useState(subText);
+  useEffect(() => setSv(subText), [subText]);
+  const subRtl = isRtl(sv);
+  const labStyle = (rt: boolean): React.CSSProperties => ({
+    background: "transparent",
+    color: res.color,
+    fontWeight: res.bold ? 700 : 400,
+    fontFamily: familyCss(cellFontId(t, rt ? "ا" : "a")),
+    fontSize: res.size,
+    lineHeight: cellLineH(res.size, rt) + "px",
+  });
+  if (split)
+    return (
+      <>
+        <textarea
+          id={`tc-${r}-${c}`}
+          ref={ref}
+          rows={1}
+          dir="auto"
+          className={"tcell dg-lab main " + res.diag + (p.active ? " active" : "")}
+          placeholder="baris ↓"
+          value={v}
+          spellCheck={false}
+          onChange={(e) => setV(e.target.value)}
+          readOnly={p.pick}
+          inputMode={p.pick ? "none" : undefined}
+          onPointerDown={(e) => {
+            if (p.pick || e.shiftKey || e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              p.onPick?.(e.shiftKey, e.ctrlKey || e.metaKey);
+            }
+          }}
+          onFocus={p.onFocus}
+          onBlur={() => v !== text && p.onCommit(v)}
+          onKeyDown={p.onKey}
+          onPaste={p.onPaste}
+          style={labStyle(rtl)}
+        />
+        <textarea
+          rows={1}
+          dir="auto"
+          className={"tcell dg-lab sub " + res.diag}
+          placeholder="kolom →"
+          value={sv}
+          spellCheck={false}
+          onChange={(e) => setSv(e.target.value)}
+          readOnly={p.pick}
+          inputMode={p.pick ? "none" : undefined}
+          onFocus={p.onFocus}
+          onBlur={() => sv !== subText && p.onSub?.(sv)}
+          onKeyDown={(e) => e.key === "Escape" && (e.currentTarget as HTMLTextAreaElement).blur()}
+          style={labStyle(subRtl)}
+        />
+      </>
+    );
   return (
     <textarea
       id={`tc-${r}-${c}`}
@@ -80,9 +143,9 @@ function Cell(p: {
       readOnly={p.pick}
       inputMode={p.pick ? "none" : undefined}
       onPointerDown={(e) => {
-        if (p.pick || e.shiftKey) {
+        if (p.pick || e.shiftKey || e.ctrlKey || e.metaKey) {
           e.preventDefault();
-          p.onPick?.(e.shiftKey);
+          p.onPick?.(e.shiftKey, e.ctrlKey || e.metaKey);
         }
       }}
       onFocus={p.onFocus}
@@ -107,7 +170,7 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
   const [sel, setSel] = useState<Sel>({ kind: "cell", r: 0, c: 0 });
   const [tick, setTick] = useState(0);
   const [live, setLive] = useState<number[] | null>(null);
-  const [pickMode, setPickMode] = useState(false);
+  const [pickMode, setPickMode] = useState<PickMode>(false);
   const [menu, setMenu] = useState<string | null>(null);
   const origin = useRef<{ r: number; c: number }>({ r: 0, c: 0 });
   const [zoom, setZoom] = useState(1);
@@ -294,7 +357,17 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
       onChange((x) => pasteGrid(x, r, c, txt));
     }
   };
-  const pick = (r: number, c: number, shift: boolean) => {
+  const pick = (r: number, c: number, shift: boolean, ctrl = false) => {
+    // Ctrl+klik / mode "beberapa sel": tambah-hapus sel satu per satu (boleh acak)
+    if ((ctrl || pickMode === "multi") && !shift) {
+      const cur = sel.kind === "multi" ? sel.keys ?? [] : cellsOf(sel, t).map(([a, b]) => keyOf(a, b));
+      const mg = anchors.get(keyOf(r, c));
+      const key = keyOf(mg ? mg.r : r, mg ? mg.c : c);
+      const keys = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+      picked.current = false;
+      setSel(keys.length ? { kind: "multi", r, c, keys } : { kind: "cell", r, c });
+      return;
+    }
     // shift+klik, atau ketukan kedua pada mode rentang → rentang dari sel awal
     if (shift || (picked.current && (origin.current.r !== r || origin.current.c !== c))) {
       setSel({ kind: "range", r: origin.current.r, c: origin.current.c, r2: r, c2: c });
@@ -307,7 +380,7 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
   };
   const picked = useRef(false);
   const startDrag = (e: React.PointerEvent) => {
-    if (e.pointerType !== "mouse" || e.button !== 0 || e.shiftKey || pickMode) return;
+    if (e.pointerType !== "mouse" || e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || pickMode) return;
     const td0 = (e.target as HTMLElement).closest("td[data-rc]") as HTMLElement | null;
     if (!td0) return;
     const [r0, c0] = td0.dataset.rc!.split(",").map(Number);
@@ -336,11 +409,11 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
 
   const R = rectOf(sel, t);
   const area = (R.r1 - R.r0 + 1) * (R.c1 - R.c0 + 1);
-  const canMerge = area > 1;
+  const canMerge = area > 1 && sel.kind !== "multi";
   const canSplit = hasMergeIn(t, R);
 
   const ar = sel.kind === "all" ? 0 : sel.r;
-  const colSel = sel.kind === "cell" || sel.kind === "col" || sel.kind === "range" ? Math.min(sel.c, sel.c2 ?? sel.c) : 0;
+  const colSel = sel.kind === "cell" || sel.kind === "col" || sel.kind === "range" || sel.kind === "multi" ? Math.min(sel.c, sel.c2 ?? sel.c) : 0;
   const rowsSel = sel.kind === "col" ? 0 : Math.min(ar, sel.r2 ?? ar);
   const mode = stripeModeOf(t);
   const act = (fn: () => void) => () => (fn(), setMenu(null));
@@ -377,9 +450,7 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
             <button className="btn small" disabled={!canSplit} onClick={() => (onChange((x) => splitRect(x, R)), setMenu(null))} title="Pisahkan sel gabungan">
               ⊟ Pisahkan sel
             </button>
-            <button className={"btn small" + (pickMode ? " active" : "")} onClick={() => ((picked.current = false), setPickMode((v) => !v))} title="Pilih beberapa sel dengan mengetuk sel awal lalu sel akhir (untuk layar sentuh)">
-              ⬚ Pilih sel
-            </button>
+            {mbtn("pick", pickMode ? "✔ Pilih sel" : "Pilih sel")}
             <span className="tbl-sep" />
             {mbtn("diag", "Diagonal")}
             {mbtn("style", "Gaya tabel")}
@@ -403,27 +474,48 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
                   <button className="btn small danger" onClick={act(() => onChange((x) => deleteCol(x, colSel)))}>Hapus kolom</button>
                 </div>
               )}
+              {menu === "pick" && (
+                <div className="tbl-list">
+                  <button className={"btn small" + (pickMode === "range" ? " active" : "")} onClick={() => ((picked.current = false), setPickMode(pickMode === "range" ? false : "range"), setMenu(null))}>
+                    ▭ Rentang — ketuk sel awal lalu sel akhir
+                  </button>
+                  <button className={"btn small" + (pickMode === "multi" ? " active" : "")} onClick={() => (setPickMode(pickMode === "multi" ? false : "multi"), setMenu(null))}>
+                    ✚ Beberapa sel — ketuk satu per satu
+                  </button>
+                  <span className="muted small">Di laptop: seret mouse untuk rentang, Ctrl+klik untuk sel acak.</span>
+                </div>
+              )}
               {menu === "diag" && (
                 <div className="tbl-list">
-                  <button className="btn small" onClick={act(() => style({ diag: "down" }))}>╲ Garis turun</button>
-                  <button className="btn small" onClick={act(() => style({ diag: "up" }))}>╱ Garis naik</button>
+                  <button className="btn small" onClick={act(() => style({ diag: "down" }))}>╲ Diagonal turun (2 label)</button>
+                  <button className="btn small" onClick={act(() => style({ diag: "up" }))}>╱ Diagonal naik (2 label)</button>
                   <button className="btn small" onClick={act(() => style({ diag: "both" }))}>╳ Silang</button>
-                  <button className="btn small" onClick={act(() => style({ diag: undefined }))}>Tanpa diagonal</button>
+                  <button className="btn small" onClick={act(() => style({ diag: undefined, sub: undefined }))}>Tanpa diagonal</button>
+                  <span className="muted small">Pada diagonal 2 label: ketik label <b>bawah</b> (untuk baris ke bawah) dan label <b>atas</b> (untuk kolom ke samping) di dalam sel.</span>
                 </div>
               )}
               {menu === "style" && (
                 <div className="tbl-list">
                   <label className="tbl-field">Gaya
                     <select value="" onChange={(e) => {
-                      const st = TABLE_STYLES.find((x) => x.id === e.target.value);
-                      if (st) set({ headBg: st.headBg, stripeBg: st.stripeBg, border: st.border, stripeMode: st.mode, stripe: st.mode !== "none" });
+                      const [kind, id] = e.target.value.split(":");
+                      const st = TABLE_STYLES.find((x) => x.id === id);
+                      if (st) set(applyTableStyle(t, st, kind as HeadKind));
                     }}>
                       <option value="">Pilih gaya…</option>
-                      {TABLE_STYLES.map((x) => (
-                        <option key={x.id} value={x.id}>{x.name}</option>
+                      {HEAD_KINDS.map((hk) => (
+                        <optgroup key={hk.id} label={hk.label}>
+                          {TABLE_STYLES.map((x) => (
+                            <option key={hk.id + x.id} value={hk.id + ":" + x.id}>{x.name}</option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </label>
+                  <div className="tbl-field">Judul
+                    <label className="check"><input type="checkbox" checked={t.headRows > 0} onChange={(e) => set({ headRows: e.target.checked ? 1 : 0 })} /> Baris</label>
+                    <label className="check"><input type="checkbox" checked={t.headCols > 0} onChange={(e) => set({ headCols: e.target.checked ? 1 : 0 })} /> Kolom</label>
+                  </div>
                   <label className="tbl-field">Belang
                     <select value={mode} onChange={(e) => set({ stripeMode: e.target.value as StripeMode, stripe: e.target.value !== "none" })}>
                       <option value="none">Tanpa belang</option>
@@ -446,21 +538,11 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
                       ))}
                     </span>
                   </div>
-                  <div className="tbl-field">Baris judul
-                    <button className="btn small" onClick={() => set({ headRows: Math.max(0, t.headRows - 1) })}>−</button>
-                    <b>{t.headRows}</b>
-                    <button className="btn small" onClick={() => set({ headRows: Math.min(t.rows, t.headRows + 1) })}>＋</button>
-                  </div>
-                  <div className="tbl-field">Kolom judul
-                    <button className="btn small" onClick={() => set({ headCols: Math.max(0, t.headCols - 1) })}>−</button>
-                    <b>{t.headCols}</b>
-                    <button className="btn small" onClick={() => set({ headCols: Math.min(t.cols, t.headCols + 1) })}>＋</button>
-                  </div>
                 </div>
               )}
               {menu === "color" && (
                 <div className="tbl-list">
-                  <div className="tbl-field">Warna isi sel
+                  <div className="tbl-field">Warna isi sel{sel.kind === "multi" ? ` (${sel.keys?.length} sel)` : ""}
                     <span className="tbl-sw">
                       {BG.map((h) => (
                         <button key={h} className="swatch" style={{ background: h }} onClick={() => style({ bg: h })} aria-label={"isi " + h} />
@@ -526,7 +608,12 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
       )}
       {pickMode && (
         <div className="tbl-hint small" style={{ background: "#eef2ff", color: "#3730a3" }}>
-          Ketuk sel awal, lalu sel akhir, kemudian tekan <b>Gabungkan sel</b>.
+          {pickMode === "range" ? (
+            <>Ketuk sel awal, lalu sel akhir, kemudian tekan <b>Gabungkan sel</b> atau pilih warna.</>
+          ) : (
+            <>Ketuk sel satu per satu (ketuk lagi untuk batal){sel.kind === "multi" ? ` — ${sel.keys?.length} dipilih` : ""}, lalu pilih <b>Warna</b>.</>
+          )}{" "}
+          <button className="btn small" onClick={() => setPickMode(false)}>Selesai</button>
         </div>
       )}
       <div className="tbl-scroll" ref={scrollEl}>
@@ -566,7 +653,7 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
                     if (covered.has(key)) return null;
                     const mg = anchors.get(key);
                     return (
-                      <td key={c} data-rc={`${r},${c}`} rowSpan={mg?.rs} colSpan={mg?.cs} style={{ background: resolveCell(t, r, c).bg }} onPointerDown={(e) => e.target === e.currentTarget && !pickMode && (e.preventDefault(), focusCell(r, c))}>
+                      <td key={c} data-rc={`${r},${c}`} className={isSplit(resolveCell(t, r, c)) ? "td-split" : undefined} rowSpan={mg?.rs} colSpan={mg?.cs} style={{ background: resolveCell(t, r, c).bg, color: resolveCell(t, r, c).color, height: isSplit(resolveCell(t, r, c)) ? cellLineH(resolveCell(t, r, c).size, false) * 2 + 18 : undefined }} onPointerDown={(e) => e.target === e.currentTarget && !pickMode && (e.preventDefault(), focusCell(r, c))}>
                         {(() => {
                           const dg = resolveCell(t, r, c).diag;
                           return dg ? (
@@ -582,8 +669,9 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
                           c={c}
                           tick={tick}
                           active={activeKeys.has(key) || (!!mg && cellsOf(sel, t).some(([a, b]) => a >= r && a < r + mg.rs && b >= c && b < c + mg.cs))}
-                          pick={pickMode}
-                          onPick={(shift) => pick(r, c, shift)}
+                          pick={!!pickMode}
+                          onPick={(shift, ctrl) => pick(r, c, shift, ctrl)}
+                          onSub={(v) => onChange((x) => { const n = cloneTable(x); n.style[keyOf(r, c)] = { ...n.style[keyOf(r, c)], sub: v }; return n; })}
                           onFocus={() => {
                             origin.current = { r, c };
                             setSel({ kind: "cell", r, c });

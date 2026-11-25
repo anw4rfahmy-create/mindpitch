@@ -1342,8 +1342,24 @@ kbd {
 .tbl-menu .swatch.txt { font-size: 12px; font-weight: 800; }
 .tbl td { position: relative; }
 .diag { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
-.diag line { stroke: #475569; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.diag line { stroke: currentColor; opacity: .75; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
 body.tbl-selecting, body.tbl-selecting * { user-select: none !important; cursor: cell; }
 @media (max-width: 720px) {
   .tbl-menu .swatch { width: 30px; height: 30px; }
 }
+
+/* sel diagonal (2 label) ala Word */
+.td-split { padding: 0; }
+.tbl .dg-lab { position: absolute !important; z-index: 3; width: 56% !important; min-height: 0; padding: 0 !important; background: transparent !important; border: 0; resize: none; overflow: hidden; }
+.tbl .dg-lab.main.down { left: 6px; bottom: 5px; text-align: left; }
+.tbl .dg-lab.sub.down { right: 6px; top: 5px; text-align: right; }
+.tbl .dg-lab.main.up { right: 6px; bottom: 5px; text-align: right; }
+.tbl .dg-lab.sub.up { left: 6px; top: 5px; text-align: left; }
+.tbl .dg-lab::placeholder { color: rgba(100,116,139,.55); font-weight: 400; font-size: 11px; }
+.dg-box { position: relative; min-width: 120px; }
+.dg-lab.main, .dg-lab.sub { position: absolute; max-width: 58%; white-space: pre-wrap; }
+.dg-lab.main.down { left: 6px; bottom: 4px; text-align: left; }
+.dg-lab.sub.down { right: 6px; top: 4px; text-align: right; }
+.dg-lab.main.up { right: 6px; bottom: 4px; text-align: right; }
+.dg-lab.sub.up { left: 6px; top: 4px; text-align: left; }
+.tbl-hint .btn { margin-left: 8px; }

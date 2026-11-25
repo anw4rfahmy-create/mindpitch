@@ -17,7 +17,11 @@ export interface ResolvedCell {
   align: "l" | "c" | "r";
   size: number;
   diag?: "down" | "up" | "both";
+  sub?: string;
 }
+
+/** Sel diagonal ala Word: garis miring membagi sel menjadi dua label. */
+export const isSplit = (res: ResolvedCell) => res.diag === "down" || res.diag === "up";
 
 export const stripeModeOf = (t: TableData): StripeMode => t.stripeMode ?? (t.stripe ? "rows" : "none");
 
@@ -30,7 +34,7 @@ export function resolveCell(t: TableData, r: number, c: number): ResolvedCell {
   const stripe = !head && ((mode === "rows" && rb) || (mode === "cols" && cb) || (mode === "both" && rb !== cb));
   const bg = st.bg ?? (head ? t.headBg : stripe ? t.stripeBg ?? "#f1f5fb" : "#ffffff");
   const color = st.color ?? contrastText(bg);
-  return { bg, color, bold: st.bold ?? head, align: st.align ?? "c", size: st.size ?? t.fontSize, diag: st.diag };
+  return { bg, color, bold: st.bold ?? head, align: st.align ?? "c", size: st.size ?? t.fontSize, diag: st.diag, sub: st.sub };
 }
 
 export const cellFontId = (t: TableData, text: string) => (isRtl(text) ? t.arFont : t.font);
@@ -51,6 +55,8 @@ export interface TCell {
   rtl: boolean;
   lineH: number;
   res: ResolvedCell;
+  split: boolean;
+  sub: string;
 }
 
 export interface TGeom {
@@ -90,7 +96,8 @@ export function columnWidths(sheet: Sheet): number[] {
       const txt = t.cells[r]?.[c] ?? "";
       const res = resolveCell(t, r, c);
       const font = fontString(cellFontId(t, txt), res.bold ? 700 : 400, res.size);
-      for (const l of txt.split("\n")) m = Math.max(m, textWidth(font, l));
+      if (isSplit(res)) m = Math.max(m, textWidth(font, txt) + textWidth(font, res.sub ?? "") + PAD_X);
+      else for (const l of txt.split("\n")) m = Math.max(m, textWidth(font, l));
     }
     colW[c] = Math.min(320, Math.max(72, Math.ceil(m) + PAD_X * 2 + 4));
   }
@@ -119,12 +126,13 @@ export function tableGeom(sheet: Sheet): TGeom {
       const id = cellFontId(t, txt);
       const rtl = isRtl(txt);
       const font = fontString(id, res.bold ? 700 : 400, res.size);
-      const lines = wrapCached(font, txt, wsum - PAD_X * 2);
+      const split = isSplit(res);
+      const lines = split ? [txt] : wrapCached(font, txt, wsum - PAD_X * 2);
       const lineH = cellLineH(res.size, rtl);
-      const need = lines.length * lineH + PAD_Y * 2;
+      const need = split ? lineH * 2 + 18 : lines.length * lineH + PAD_Y * 2;
       if (rs === 1) h = Math.max(h, need);
       else pending.push({ r, rs, need });
-      raw.push({ r, c, rs, cs, x: 0, y: 0, w: wsum, h: 0, lines, font, fam: familyCss(id), rtl, lineH, res });
+      raw.push({ r, c, rs, cs, x: 0, y: 0, w: wsum, h: 0, lines, font, fam: familyCss(id), rtl, lineH, res, split, sub: res.sub ?? "" });
     }
     rowH[r] = Math.max(h, 40);
   }
@@ -159,6 +167,17 @@ export function tableGeom(sheet: Sheet): TGeom {
   return { w: total, h: ya, cells: raw, colW, rowH };
 }
 
+/** Dua label pada sel diagonal: label utama di separuh bawah, label kedua di separuh atas. */
+function splitLabels(k: TCell) {
+  const down = k.res.diag === "down";
+  const yTop = k.y + 6 + k.lineH / 2;
+  const yBot = k.y + k.h - 6 - k.lineH / 2;
+  return [
+    { text: k.lines[0] ?? "", x: down ? k.x + PAD_X : k.x + k.w - PAD_X, y: yBot, side: down ? "l" : "r" },
+    { text: k.sub, x: down ? k.x + k.w - PAD_X : k.x + PAD_X, y: yTop, side: down ? "r" : "l" },
+  ];
+}
+
 const textX = (k: TCell) => (k.res.align === "c" ? k.x + k.w / 2 : k.res.align === "l" ? k.x + PAD_X : k.x + k.w - PAD_X);
 
 export async function ensureTableFonts(sheet: Sheet) {
@@ -178,15 +197,28 @@ export function drawTable(ctx: CanvasRenderingContext2D, sheet: Sheet) {
   for (const k of g.cells) ctx.strokeRect(k.x, k.y, k.w, k.h);
   for (const k of g.cells) {
     if (!k.res.diag) continue;
+    ctx.strokeStyle = k.res.color;
     ctx.beginPath();
     if (k.res.diag !== "up") (ctx.moveTo(k.x, k.y), ctx.lineTo(k.x + k.w, k.y + k.h));
     if (k.res.diag !== "down") (ctx.moveTo(k.x, k.y + k.h), ctx.lineTo(k.x + k.w, k.y));
     ctx.stroke();
   }
+  ctx.strokeStyle = t.border;
   ctx.lineWidth = 2.4;
   ctx.strokeRect(0, 0, g.w, g.h);
   ctx.textBaseline = "middle";
   for (const k of g.cells) {
+    if (k.split) {
+      ctx.fillStyle = k.res.color;
+      for (const lb of splitLabels(k)) {
+        if (!lb.text) continue;
+        ctx.font = fontString(cellFontId(t, lb.text), k.res.bold ? 700 : 400, k.res.size);
+        ctx.direction = isRtl(lb.text) ? "rtl" : "ltr";
+        ctx.textAlign = lb.side === "l" ? "left" : "right";
+        ctx.fillText(lb.text, lb.x, lb.y);
+      }
+      continue;
+    }
     ctx.fillStyle = k.res.color;
     ctx.font = k.font;
     ctx.direction = k.rtl ? "rtl" : "ltr";
@@ -203,11 +235,22 @@ export function tableSvg(sheet: Sheet): string {
   const P: string[] = [];
   for (const k of g.cells) P.push(`<rect x="${k.x}" y="${k.y}" width="${k.w}" height="${k.h}" fill="${k.res.bg}" stroke="${t.border}" stroke-width="1.2"/>`);
   for (const k of g.cells) {
-    if (k.res.diag && k.res.diag !== "up") P.push(`<line x1="${k.x}" y1="${k.y}" x2="${k.x + k.w}" y2="${k.y + k.h}" stroke="${t.border}" stroke-width="1.2"/>`);
-    if (k.res.diag && k.res.diag !== "down") P.push(`<line x1="${k.x}" y1="${k.y + k.h}" x2="${k.x + k.w}" y2="${k.y}" stroke="${t.border}" stroke-width="1.2"/>`);
+    if (k.res.diag && k.res.diag !== "up") P.push(`<line x1="${k.x}" y1="${k.y}" x2="${k.x + k.w}" y2="${k.y + k.h}" stroke="${k.res.color}" stroke-width="1.2"/>`);
+    if (k.res.diag && k.res.diag !== "down") P.push(`<line x1="${k.x}" y1="${k.y + k.h}" x2="${k.x + k.w}" y2="${k.y}" stroke="${k.res.color}" stroke-width="1.2"/>`);
   }
   P.push(`<rect width="${g.w}" height="${g.h}" fill="none" stroke="${t.border}" stroke-width="2.4"/>`);
   for (const k of g.cells) {
+    if (k.split) {
+      for (const lb of splitLabels(k)) {
+        if (!lb.text) continue;
+        const rtl = isRtl(lb.text);
+        const anchor = (lb.side === "l") !== rtl ? "start" : "end";
+        P.push(
+          `<text x="${lb.x}" y="${lb.y}" text-anchor="${anchor}" dominant-baseline="central" direction="${rtl ? "rtl" : "ltr"}" fill="${k.res.color}" font-family="${familyCss(cellFontId(t, lb.text)).replace(/"/g, "'")}" font-size="${k.res.size}" font-weight="${k.res.bold ? 700 : 400}">${esc(lb.text)}</text>`
+        );
+      }
+      continue;
+    }
     const anchor = k.res.align === "c" ? "middle" : k.res.align === "l" ? "start" : "end";
     const top = k.y + (k.h - k.lines.length * k.lineH) / 2;
     k.lines.forEach((l, i) =>
@@ -409,6 +452,25 @@ export const TABLE_STYLES: TableStyle[] = [
   { id: "catur", name: "Papan catur", headBg: "#1e293b", stripeBg: "#fef3c7", border: "#cbd5e1", mode: "both" },
   { id: "polos", name: "Polos", headBg: "#475569", stripeBg: "#f1f5f9", border: "#94a3b8", mode: "none" },
 ];
+
+/** Susunan judul tabel: baris pertama, kolom pertama, atau keduanya. */
+export type HeadKind = "row" | "col" | "both";
+export const HEAD_KINDS: { id: HeadKind; label: string }[] = [
+  { id: "row", label: "Judul baris" },
+  { id: "col", label: "Judul kolom" },
+  { id: "both", label: "Judul baris & kolom" },
+];
+export function applyTableStyle(t: TableData, st: TableStyle, head: HeadKind): Partial<TableData> {
+  return {
+    headBg: st.headBg,
+    stripeBg: st.stripeBg,
+    border: st.border,
+    stripeMode: st.mode,
+    stripe: st.mode !== "none",
+    headRows: head === "col" ? 0 : Math.max(1, t.headRows),
+    headCols: head === "row" ? 0 : Math.max(1, t.headCols),
+  };
+}
 
 export function ensureSize(t: TableData, rows: number, cols: number): TableData {
   let n = t;

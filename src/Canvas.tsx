@@ -427,7 +427,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
   );
 
   const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
-  const clipScale = Math.min(coarse ? 3.4 : 2.2, Math.max(1, (coarse ? 1.7 : 1.2) / view.k));
+  const clipScale = Math.min(coarse ? 2.5 : 1.6, Math.max(1, (coarse ? 1.25 : 0.95) / view.k));
   const nodeEls = useMemo(
     () =>
       layout.order.map((id) => {
@@ -528,11 +528,11 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
             {n.note && <circle cx={ln.w - 3} cy={3} r={4.5} fill="#f59e0b" stroke="#fff" strokeWidth={1.5} pointerEvents="none" />}
             {ac > 0 && (
               <g data-clip={id} transform={`translate(${coarse ? -2 : 2},${coarse ? -2 : 2}) scale(${clipScale})`} style={{ cursor: "pointer" }}>
-                <circle r={coarse ? 16 : 13} fill="transparent" />
-                <circle r={10} fill="#4f46e5" stroke="#fff" strokeWidth={1.8} />
-                <path d="M-3.5,1.5 L1,-3.2 a2,2 0 0 1 2.8,2.8 L-1.8,4.4 a3.3,3.3 0 0 1 -4.6,-4.6 L-0.8,-5.8" fill="none" stroke="#fff" strokeWidth={1.5} strokeLinecap="round" transform="scale(.9)" />
+                <circle r={coarse ? 13 : 10} fill="transparent" />
+                <circle r={7} fill="#4f46e5" stroke="#fff" strokeWidth={1.5} />
+                <path d="M-3.5,1.5 L1,-3.2 a2,2 0 0 1 2.8,2.8 L-1.8,4.4 a3.3,3.3 0 0 1 -4.6,-4.6 L-0.8,-5.8" fill="none" stroke="#fff" strokeWidth={1.7} strokeLinecap="round" transform="scale(.62)" />
                 {ac > 1 && (
-                  <text x={12} y={-6} fontSize={10} fontWeight={800} fill="#4f46e5" style={{ font: "800 10px system-ui" }}>
+                  <text x={9} y={-4} fontSize={9} fontWeight={800} fill="#4f46e5" style={{ font: "800 9px system-ui" }}>
                     {ac}
                   </text>
                 )}

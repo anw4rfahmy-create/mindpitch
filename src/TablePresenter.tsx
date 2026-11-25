@@ -132,9 +132,16 @@ export default function TablePresenter({ sheet, onClose }: { sheet: Sheet; onClo
                           {res.diag !== "down" && <line x1="0" y1="100" x2="100" y2="0" />}
                         </svg>
                       )}
-                      {txt.split("\n").map((l, i) => (
-                        <div key={i} dir="auto">{l || " "}</div>
-                      ))}
+                      {res.diag === "down" || res.diag === "up" ? (
+                        <div className="dg-box" style={{ height: cellLineH(res.size, rtl) * 2 + 18 }}>
+                          <div className={"dg-lab main " + res.diag} dir="auto">{txt}</div>
+                          <div className={"dg-lab sub " + res.diag} dir="auto">{res.sub ?? ""}</div>
+                        </div>
+                      ) : (
+                        txt.split("\n").map((l, i) => (
+                          <div key={i} dir="auto">{l || "\u00a0"}</div>
+                        ))
+                      )}
                     </td>
                   );
                 })}

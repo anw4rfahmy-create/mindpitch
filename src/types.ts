@@ -108,6 +108,7 @@ export interface CellStyle {
   align?: "l" | "c" | "r";
   size?: number;
   diag?: "down" | "up" | "both"; // garis diagonal pada sel
+  sub?: string; // label kedua pada sel diagonal (separuh atas)
 }
 
 /** Lembar bertipe tabel (mis. tashrif). Sel diindeks [baris][kolom] secara logis; bila `rtl`, kolom 0 tampil di kanan. */
