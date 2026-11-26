@@ -3,6 +3,7 @@ import { textWidth, wrapCached } from "./measure";
 import { effectiveShape, lineStyleFor } from "./nodeStyle";
 import { NodeShape, Sheet } from "./types";
 import { tableGeom } from "./table";
+import { vennGeom } from "./venn";
 import { boundaryRects, CHIP_FONT, Deco, EQ_FONT, GLYPH_FONT, layoutDeco } from "./deco";
 
 export type Side = "c" | "r" | "l" | "d" | "u";
@@ -147,7 +148,7 @@ function measure(sheet: Sheet, id: string, depth: number): Omit<LNode, "x" | "y"
 // ---------------------------------------------------------------- tata letak
 export function computeLayout(sheet: Sheet): LayoutResult {
   const r = computeLayoutBase(sheet);
-  if (sheet.table) return r;
+  if (sheet.table || sheet.venn) return r;
   let b = r.bounds;
   for (const q of boundaryRects(sheet, r)) {
     const x0 = Math.min(b.x, q.x - 2),
@@ -160,6 +161,10 @@ export function computeLayout(sheet: Sheet): LayoutResult {
 }
 
 function computeLayoutBase(sheet: Sheet): LayoutResult {
+  if (sheet.venn) {
+    const g = vennGeom(sheet);
+    return { nodes: {}, order: [], edges: [], bounds: { x: -10, y: -6, w: g.w + 20, h: g.h + 12 } };
+  }
   if (sheet.table) {
     const g = tableGeom(sheet);
     return { nodes: {}, order: [], edges: [], bounds: { x: -2, y: -2, w: g.w + 4, h: g.h + 4 } };

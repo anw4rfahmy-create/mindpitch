@@ -141,8 +141,28 @@ export interface TableData {
   border: string;
 }
 
+export type VennLayout = "overlap" | "same" | "apart" | "inside" | "three";
+export interface VennSet {
+  name: string;
+  color: string;
+}
+export interface VennDiagram {
+  title: string;
+  layout: VennLayout;
+  sets: VennSet[]; // 3 entri (yang dipakai: 2 atau 3)
+  text: Record<string, string>; // kunci wilayah ("a", "ab", "abc", …) → isi
+}
+export interface VennData {
+  diagrams: VennDiagram[];
+  cols: 1 | 2;
+  font: string;
+  arFont: string;
+  fontSize: number;
+}
+
 export interface Sheet {
   table?: TableData;
+  venn?: VennData;
   id: string;
   title: string;
   rootId: string;

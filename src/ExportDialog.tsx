@@ -100,7 +100,7 @@ export default function ExportDialog({ wb, sheet, onClose, onDone }: Props) {
         <div className="export-body">
           <div className="export-opts">
             <div className="fmt-grid">
-              {FORMATS.filter((f) => !(sheet.table && f.id === "xmind")).map((f) => (
+              {FORMATS.filter((f) => !((sheet.table || sheet.venn) && f.id === "xmind")).map((f) => (
                 <button key={f.id} className={fmt === f.id ? "on" : ""} onClick={() => setFmt(f.id)}>
                   <b>{f.label}</b>
                   <small>{f.sub}</small>

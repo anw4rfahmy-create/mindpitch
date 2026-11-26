@@ -1,4 +1,5 @@
 import { parseDelimited, tableFromGrid, tableToMarkdown } from "./table";
+import { vennToMarkdown } from "./venn";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { addChild, newSheet, newTableSheet, newWorkbook, normalizeWorkbook, uid, activeSheet } from "./model";
 import { filesOfDoc, putFile } from "./files";
@@ -75,6 +76,7 @@ export async function importFile(file: File, targetDocId?: string): Promise<Work
 // ---------- Markdown ----------
 export function sheetToMarkdown(sheet: Sheet): string {
   if (sheet.table) return tableToMarkdown(sheet);
+  if (sheet.venn) return vennToMarkdown(sheet);
   const lines: string[] = [];
   const root = sheet.nodes[sheet.rootId];
   lines.push(`# ${root.text.replace(/\n/g, " ")}`, "");

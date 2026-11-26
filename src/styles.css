@@ -1368,3 +1368,12 @@ body.tbl-selecting, body.tbl-selecting * { user-select: none !important; cursor:
 .cell-clip { position: absolute; right: 3px; top: 3px; z-index: 5; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; border: 1.5px solid #fff; background: #4f46e5; color: #fff; font-size: 11px; line-height: 17px; font-weight: 700; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
 @media (pointer: coarse) { .cell-clip { min-width: 26px; height: 26px; line-height: 23px; font-size: 13px; } }
 .modal-back { z-index: 120; }
+
+/* Diagram Venn */
+.venn-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--bg, #f5f7fb); }
+.venn-bar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.venn-stage { flex: 1; min-height: 0; padding: 8px; display: flex; }
+.venn-stage svg { width: 100%; height: 100%; background: #fff; border-radius: 12px; border: 1px solid var(--line); }
+.venn-edit { padding: 8px 12px 10px; border-top: 1px solid var(--line); background: var(--panel); }
+.venn-edit textarea, .venn-edit input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; resize: vertical; background: #fff; color: inherit; }
+.venn-present .tbl-stage { padding: 8px; }

@@ -4,6 +4,8 @@ import Outline from "./Outline";
 import PitchPanel from "./PitchPanel";
 import TableEditor from "./TableEditor";
 import TablePresenter from "./TablePresenter";
+import VennEditor from "./VennEditor";
+import VennPresenter from "./VennPresenter";
 import { TABLE_TEMPLATES, TableTemplate, mapToTable } from "./table";
 import { importFile as importAny } from "./exporters";
 import SheetBar from "./SheetBar";
@@ -29,7 +31,7 @@ import {
   updateNode,
   usedFileIds,
   addSummary,
-  newTableSheet,
+  newTableSheet, newVennSheet,
 } from "./model";
 import ExportDialog from "./ExportDialog";
 import { deleteFilesExcept, prepareImage, putFile } from "./files";
@@ -379,6 +381,12 @@ export default function Editor({ initial, onBack }: Props) {
     setSelectedId(null);
     setShowNew(false);
   };
+  const addVennSheet = () => {
+    const s = newVennSheet(`Venn ${doc.sheets.length + 1}`);
+    apply((d) => ({ ...d, sheets: [...d.sheets, s], activeId: s.id }));
+    setSelectedId(null);
+    setShowNew(false);
+  };
   const addMapSheet = () => {
     setShowNew(false);
     const s = newSheet(`Lembar ${doc.sheets.length + 1}`, "Topik utama");
@@ -402,7 +410,7 @@ export default function Editor({ initial, onBack }: Props) {
     const added = imp.sheets.map((x) => ({ ...x, id: uid() }));
     setShowNew(false);
     apply((d) => ({ ...d, sheets: [...d.sheets, ...added], activeId: added[0].id }));
-    setSelectedId(added[0].table ? null : added[0].rootId);
+    setSelectedId(added[0].table || added[0].venn ? null : added[0].rootId);
     setFitKey((k) => k + 1);
     say(`${added.length} lembar diimpor`);
   };
@@ -645,6 +653,7 @@ export default function Editor({ initial, onBack }: Props) {
   const topicCount = Object.keys(layout.nodes).length;
   const totalTopics = Object.keys(sheet.nodes).length;
   const attachNode = attachFor ? sheet.nodes[attachFor] : null;
+  const isMap = !sheet.table && !sheet.venn;
 
   return (
     <div className={"editor" + (zen ? " zen" : "")}>
@@ -667,12 +676,12 @@ export default function Editor({ initial, onBack }: Props) {
         <button className="btn icon" disabled={!canRedo} onClick={redo} title="Ulangi (Ctrl+Y)">
           ↷
         </button>
-        {!sheet.table && (
+        {isMap && (
           <button className={"btn" + (showOutline ? " active" : "")} onClick={() => setShowOutline((v) => !v)}>
             ☰ <span className="hide-sm">Kerangka</span>
           </button>
         )}
-        {sheet.table ? (
+        {sheet.venn ? null : sheet.table ? (
           <button className={"btn" + (tblTools ? " active" : "")} onClick={() => setTblTools((v) => !v)}>
             🎨 <span className="hide-sm">Format</span>
           </button>
@@ -688,11 +697,11 @@ export default function Editor({ initial, onBack }: Props) {
           ⬇ <span className="hide-sm">Ekspor</span>
         </button>
         <button className="btn primary" onClick={() => setShowPitch(true)}>
-          {sheet.table ? "▶ Presentasi" : "🎬 Presentasi"}
+          {sheet.table || sheet.venn ? "▶ Presentasi" : "🎬 Presentasi"}
         </button>
       </header>
 
-      {!sheet.table && (
+      {isMap && (
         <div className="ribbon" role="toolbar" aria-label="Alat topik">
           <button className="rb" disabled={!sel || !!sel.summary} onClick={() => sel && addChildOf(sel.id)} title="Subtopik (Tab)">
             <span className="ic">⊢</span>Subtopik
@@ -729,7 +738,7 @@ export default function Editor({ initial, onBack }: Props) {
       )}
 
       <div className="workspace">
-        {showOutline && !sheet.table && (
+        {showOutline && isMap && (
           <aside className="side outline-side">
             <Outline
               sheet={sheet}
@@ -757,7 +766,12 @@ export default function Editor({ initial, onBack }: Props) {
         )}
 
         <div className="canvas-col">
-          {sheet.table ? (
+          {sheet.venn ? (
+            <div className="canvas-area">
+              <VennEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, venn: fn(sh.venn!) }))} onPresent={() => setShowPitch(true)} />
+              {toast && <div className="toast">{toast}</div>}
+            </div>
+          ) : sheet.table ? (
             <div className="canvas-area">
               <TableEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, table: fn(sh.table!) }))} onPresent={() => setShowPitch(true)} onFocusMode={() => setZen(true)} tools={tblTools} onTools={setTblTools} onAttach={(r, c) => setAttachCell(`${r},${c}`)} />
               {toast && <div className="toast">{toast}</div>}
@@ -857,8 +871,8 @@ export default function Editor({ initial, onBack }: Props) {
           <SheetBar
             sheets={doc.sheets}
             activeId={doc.activeId}
-            topicCount={sheet.table ? sheet.table.rows * sheet.table.cols : topicCount === totalTopics ? totalTopics : topicCount}
-            unit={sheet.table ? "sel" : "topik"}
+            topicCount={sheet.venn ? sheet.venn.diagrams.length : sheet.table ? sheet.table.rows * sheet.table.cols : topicCount === totalTopics ? totalTopics : topicCount}
+            unit={sheet.venn ? "diagram" : sheet.table ? "sel" : "topik"}
             onSelect={selectSheet}
             onAdd={addSheet}
             onRename={renameSheet}
@@ -869,7 +883,7 @@ export default function Editor({ initial, onBack }: Props) {
           />
         </div>
 
-        {showFormat && (!sheet.table || panelTab === "keys" || panelTab === "help") && (
+        {showFormat && (isMap || panelTab === "keys" || panelTab === "help") && (
           <FormatPanel
             key={doc.activeId}
             sheet={sheet}
@@ -1014,12 +1028,14 @@ export default function Editor({ initial, onBack }: Props) {
               {TABLE_TEMPLATES.map((x) => (
                 <button key={x.id} className="newsheet-item" onClick={() => addTableSheet(x.id)}><b>▦ {x.title}</b><span className="small muted">{x.sub}</span></button>
               ))}
+              <button className="newsheet-item" onClick={addVennSheet}><b>◯ Diagram Venn</b><span className="small muted">2–3 lingkaran, irisan, nisbah (sama, terpisah, di dalam, beririsan)</span></button>
             </div>
           </div>
         </div>
       )}
       {showPitch && sheet.table && <TablePresenter sheet={sheet} onClose={() => setShowPitch(false)} onAttach={(r, c) => setAttachCell(`${r},${c}`)} />}
-      {showPitch && !sheet.table && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onClose={() => setShowPitch(false)} />}
+      {showPitch && sheet.venn && <VennPresenter sheet={sheet} onClose={() => setShowPitch(false)} />}
+      {showPitch && isMap && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onClose={() => setShowPitch(false)} />}
     </div>
   );
 }

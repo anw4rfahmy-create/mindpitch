@@ -1,4 +1,5 @@
 import { normalizeTable, templateTable, TableTemplate } from "./table";
+import { defaultVenn, normalizeVenn } from "./venn";
 import { MNode, Sheet, StructureId, Workbook, defaultBg, defaultPitch } from "./types";
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -29,6 +30,12 @@ export function newSheet(title = "Lembar 1", rootText = "Topik utama", structure
 export function newTableSheet(title: string, tpl: TableTemplate): Sheet {
   const s = newSheet(title, title);
   s.table = templateTable(tpl);
+  return s;
+}
+
+export function newVennSheet(title: string): Sheet {
+  const s = newSheet(title, title);
+  s.venn = defaultVenn();
   return s;
 }
 
@@ -308,6 +315,7 @@ function normalizeSheet(raw: any): Sheet | null {
     nodes,
     structure,
     table: raw.table ? normalizeTable(raw.table) : undefined,
+    venn: raw.venn ? normalizeVenn(raw.venn) : undefined,
     bg: { ...defaultBg(), ...(raw.bg || {}) },
     floats: Array.isArray(raw.floats) ? raw.floats : [],
     pitch,
