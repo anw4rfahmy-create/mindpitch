@@ -55,6 +55,7 @@ export async function duplicateDoc(wb: Workbook): Promise<Workbook> {
     if (s.bg.imageId) s.bg.imageId = remap(s.bg.imageId);
     if (s.pitch.bgImageId) s.pitch.bgImageId = remap(s.pitch.bgImageId);
     s.floats.forEach((f) => (f.fileId = remap(f.fileId)!));
+    if (s.table) for (const k in s.table.style) s.table.style[k].att?.forEach((a) => (a.id = remap(a.id)!));
     for (const id in s.nodes) {
       const n = s.nodes[id];
       if (n.image) n.image.fileId = remap(n.image.fileId)!;

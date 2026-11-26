@@ -5,7 +5,7 @@ import { Sheet } from "./types";
 
 type Mode = "row" | "col" | "cell" | "down" | "tap" | "all";
 
-export default function TablePresenter({ sheet, onClose }: { sheet: Sheet; onClose(): void }) {
+export default function TablePresenter({ sheet, onClose, onAttach }: { sheet: Sheet; onClose(): void; onAttach?(r: number, c: number): void }) {
   const t = sheet.table!;
   const [mode, setMode] = useState<Mode>("row");
   const [step, setStep] = useState(0);
@@ -131,6 +131,18 @@ export default function TablePresenter({ sheet, onClose }: { sheet: Sheet; onClo
                           {res.diag !== "up" && <line x1="0" y1="0" x2="100" y2="100" />}
                           {res.diag !== "down" && <line x1="0" y1="100" x2="100" y2="0" />}
                         </svg>
+                      )}
+                      {vis && (t.style[`${r},${c}`]?.att?.length ?? 0) > 0 && (
+                        <button
+                          className="cell-clip"
+                          aria-label="Buka lampiran sel"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAttach?.(r, c);
+                          }}
+                        >
+                          📎{t.style[`${r},${c}`]!.att!.length > 1 ? t.style[`${r},${c}`]!.att!.length : ""}
+                        </button>
                       )}
                       {res.diag === "down" || res.diag === "up" ? (
                         <div className="dg-box" style={{ height: cellLineH(res.size, rtl) * 2 + 18 }}>

@@ -275,6 +275,7 @@ export function usedFileIds(wb: Workbook): Set<string> {
     if (s.bg.imageId) used.add(s.bg.imageId);
     if (s.pitch.bgImageId) used.add(s.pitch.bgImageId);
     s.floats.forEach((f) => used.add(f.fileId));
+    if (s.table) for (const k in s.table.style) s.table.style[k].att?.forEach((a) => used.add(a.id));
     for (const id in s.nodes) {
       const n = s.nodes[id];
       if (n.image) used.add(n.image.fileId);

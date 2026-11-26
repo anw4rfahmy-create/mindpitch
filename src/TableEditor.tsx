@@ -13,6 +13,7 @@ interface Props {
   onFocusMode?(): void;
   tools: boolean;
   onTools(v: boolean): void;
+  onAttach(r: number, c: number): void;
 }
 
 const BG = ["#ffffff", "#fef3c7", "#d1fae5", "#dbeafe", "#fce7f3", "#fee2e2", "#ede9fe", "#0f766e", "#4f46e5", "#1e293b"];
@@ -165,7 +166,7 @@ function Cell(p: {
   );
 }
 
-export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, tools, onTools }: Props) {
+export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, tools, onTools, onAttach }: Props) {
   const t = sheet.table!;
   const [sel, setSel] = useState<Sel>({ kind: "cell", r: 0, c: 0 });
   const [tick, setTick] = useState(0);
@@ -452,6 +453,9 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
             </button>
             {mbtn("pick", pickMode ? "✔ Pilih sel" : "Pilih sel")}
             <span className="tbl-sep" />
+            <button className="btn small" onClick={() => onAttach(sel.r, sel.c)} title="Lampirkan berkas (gambar, PDF, dokumen, audio, video) pada sel terpilih">
+              📎 Lampiran{(t.style[keyOf(sel.r, sel.c)]?.att?.length ?? 0) > 0 ? ` (${t.style[keyOf(sel.r, sel.c)]!.att!.length})` : ""}
+            </button>
             {mbtn("diag", "Diagonal")}
             {mbtn("style", "Gaya tabel")}
             {mbtn("color", "Warna")}
@@ -663,6 +667,19 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
                             </svg>
                           ) : null;
                         })()}
+                        {(t.style[key]?.att?.length ?? 0) > 0 && (
+                          <button
+                            className="cell-clip"
+                            aria-label="Buka lampiran sel"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAttach(r, c);
+                            }}
+                          >
+                            📎{t.style[key]!.att!.length > 1 ? t.style[key]!.att!.length : ""}
+                          </button>
+                        )}
                         <Cell
                           t={t}
                           r={r}

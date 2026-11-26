@@ -58,6 +58,7 @@ export default function Editor({ initial, onBack }: Props) {
   const [showExport, setShowExport] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [attachFor, setAttachFor] = useState<string | null>(null);
+  const [attachCell, setAttachCell] = useState<string | null>(null); // "r,c" pada lembar tabel
   const [tapAttach, setTapAttach] = useState(() => {
     try {
       return localStorage.getItem("mapit-tap-attach") !== "0";
@@ -331,6 +332,26 @@ export default function Editor({ initial, onBack }: Props) {
       }
     }
     if (list.length) setNodes((n) => updateNode(n, id, { attachments: [...(n[id].attachments ?? []), ...list] }));
+  };
+
+  const setCellAtt = (key: string, fn: (list: Attachment[]) => Attachment[]) =>
+    applySheet((sh) => {
+      const t = sh.table!;
+      const cur = t.style[key] ?? {};
+      const att = fn(cur.att ?? []);
+      return { ...sh, table: { ...t, style: { ...t.style, [key]: { ...cur, att: att.length ? att : undefined } } } };
+    });
+  const addCellAttachments = async (key: string, files: File[]) => {
+    const list: Attachment[] = [];
+    for (const f of files) {
+      try {
+        const fid = await putFile(doc.id, f, f.name);
+        list.push({ id: fid, name: f.name, mime: f.type || "application/octet-stream", size: f.size });
+      } catch {
+        say("Gagal menyimpan " + f.name);
+      }
+    }
+    if (list.length) setCellAtt(key, (l) => [...l, ...list]);
   };
 
   const floatChange = useCallback(
@@ -738,7 +759,7 @@ export default function Editor({ initial, onBack }: Props) {
         <div className="canvas-col">
           {sheet.table ? (
             <div className="canvas-area">
-              <TableEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, table: fn(sh.table!) }))} onPresent={() => setShowPitch(true)} onFocusMode={() => setZen(true)} tools={tblTools} onTools={setTblTools} />
+              <TableEditor sheet={sheet} onChange={(fn) => applySheet((sh) => ({ ...sh, table: fn(sh.table!) }))} onPresent={() => setShowPitch(true)} onFocusMode={() => setZen(true)} tools={tblTools} onTools={setTblTools} onAttach={(r, c) => setAttachCell(`${r},${c}`)} />
               {toast && <div className="toast">{toast}</div>}
             </div>
           ) : (
@@ -948,6 +969,15 @@ export default function Editor({ initial, onBack }: Props) {
           ✕ Keluar ZEN
         </button>
       )}
+      {attachCell && sheet.table && (
+        <AttachmentViewer
+          title={(sheet.table.cells[+attachCell.split(",")[0]]?.[+attachCell.split(",")[1]] ?? "").split("\n")[0].slice(0, 40) || `sel ${+attachCell.split(",")[0] + 1}:${+attachCell.split(",")[1] + 1}`}
+          items={sheet.table.style[attachCell]?.att ?? []}
+          onAdd={(fs) => addCellAttachments(attachCell, fs)}
+          onRemove={(id) => setCellAtt(attachCell, (l) => l.filter((a) => a.id !== id))}
+          onClose={() => setAttachCell(null)}
+        />
+      )}
       {attachFor && attachNode && (
         <AttachmentViewer
           title={attachNode.text.split("\n")[0].slice(0, 40)}
@@ -988,7 +1018,7 @@ export default function Editor({ initial, onBack }: Props) {
           </div>
         </div>
       )}
-      {showPitch && sheet.table && <TablePresenter sheet={sheet} onClose={() => setShowPitch(false)} />}
+      {showPitch && sheet.table && <TablePresenter sheet={sheet} onClose={() => setShowPitch(false)} onAttach={(r, c) => setAttachCell(`${r},${c}`)} />}
       {showPitch && !sheet.table && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onClose={() => setShowPitch(false)} />}
     </div>
   );

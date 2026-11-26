@@ -1363,3 +1363,8 @@ body.tbl-selecting, body.tbl-selecting * { user-select: none !important; cursor:
 .dg-lab.main.up { right: 6px; bottom: 4px; text-align: right; }
 .dg-lab.sub.up { left: 6px; top: 4px; text-align: left; }
 .tbl-hint .btn { margin-left: 8px; }
+
+/* lampiran pada sel tabel */
+.cell-clip { position: absolute; right: 3px; top: 3px; z-index: 5; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; border: 1.5px solid #fff; background: #4f46e5; color: #fff; font-size: 11px; line-height: 17px; font-weight: 700; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+@media (pointer: coarse) { .cell-clip { min-width: 26px; height: 26px; line-height: 23px; font-size: 13px; } }
+.modal-back { z-index: 120; }
