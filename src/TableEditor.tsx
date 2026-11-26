@@ -444,6 +444,9 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
           <div className="tbl-row">
             {mbtn("ins", "Sisipkan")}
             {mbtn("del", "Hapus")}
+            <button className="btn small" onClick={() => onAttach(sel.r, sel.c)} title="Lampirkan berkas (gambar, PDF, dokumen, audio, video) pada sel terpilih">
+              📎 Lampiran{(t.style[keyOf(sel.r, sel.c)]?.att?.length ?? 0) > 0 ? ` (${t.style[keyOf(sel.r, sel.c)]!.att!.length})` : ""}
+            </button>
             <span className="tbl-sep" />
             <button className="btn small" disabled={!canMerge} onClick={() => (onChange((x) => mergeRect(x, R)), setSel({ kind: "cell", r: expandRect(t, R).r0, c: expandRect(t, R).c0 }), setMenu(null))} title="Gabungkan sel yang dipilih menjadi satu">
               ⊞ Gabungkan sel
@@ -453,9 +456,6 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
             </button>
             {mbtn("pick", pickMode ? "✔ Pilih sel" : "Pilih sel")}
             <span className="tbl-sep" />
-            <button className="btn small" onClick={() => onAttach(sel.r, sel.c)} title="Lampirkan berkas (gambar, PDF, dokumen, audio, video) pada sel terpilih">
-              📎 Lampiran{(t.style[keyOf(sel.r, sel.c)]?.att?.length ?? 0) > 0 ? ` (${t.style[keyOf(sel.r, sel.c)]!.att!.length})` : ""}
-            </button>
             {mbtn("diag", "Diagonal")}
             {mbtn("style", "Gaya tabel")}
             {mbtn("color", "Warna")}
@@ -470,6 +470,7 @@ export default function TableEditor({ sheet, onChange, onPresent, onFocusMode, t
                   <button className="btn small" onClick={act(() => onChange((x) => insertRow(x, R.r1 + 1)))}>Baris di bawah</button>
                   <button className="btn small" onClick={act(() => onChange((x) => insertCol(x, x.rtl ? R.c1 + 1 : colSel)))}>Kolom di kiri</button>
                   <button className="btn small" onClick={act(() => onChange((x) => insertCol(x, x.rtl ? colSel : R.c1 + 1)))}>Kolom di kanan</button>
+                  <button className="btn small" onClick={act(() => onAttach(sel.r, sel.c))}>📎 Lampiran pada sel</button>
                 </div>
               )}
               {menu === "del" && (
