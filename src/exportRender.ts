@@ -57,6 +57,7 @@ export interface ExportOpts {
   quality: 1 | 2; // 1 = normal, 2 = tinggi
   scope: "sheet" | "all"; // PDF
   transparent: boolean; // PNG tanpa latar
+  attachments: boolean; // PDF: sertakan lampiran di halaman akhir
 }
 
 export const defaultExportOpts = (): ExportOpts => ({
@@ -69,6 +70,7 @@ export const defaultExportOpts = (): ExportOpts => ({
   title: false,
   quality: 1,
   scope: "sheet",
+  attachments: false,
   transparent: false,
 });
 
@@ -594,6 +596,10 @@ export async function renderPdf(sheets: Sheet[], o: ExportOpts, docTitle: string
   for (const s of sheets) {
     const r = await renderBlob(s, o, "image/jpeg", o.title ? s.title : undefined);
     pages.push({ jpeg: new Uint8Array(await r.blob.arrayBuffer()), pxW: r.w, pxH: r.h, ptW: r.ptW!, ptH: r.ptH! });
+  }
+  if (o.attachments && pages.length) {
+    const { attachmentPages } = await import("./exportAttach");
+    pages.push(...(await attachmentPages(sheets, pages[0].ptW, pages[0].ptH)));
   }
   return buildPdf(pages, docTitle);
 }

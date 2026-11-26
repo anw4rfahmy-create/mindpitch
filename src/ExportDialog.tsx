@@ -3,6 +3,7 @@ import { computeLayout } from "./layout";
 import { FRAMES, PAPERS, RATIOS, ExportOpts, defaultExportOpts, framePreviewSvg, pageSize, renderBlob, renderPage, renderPdf, renderSvg } from "./exportRender";
 import { download, safeName, sheetToMarkdown, toMindpitch } from "./exporters";
 import { toXmind } from "./xmind";
+import { collectAttachments } from "./exportAttach";
 import { Sheet, Workbook } from "./types";
 
 type Fmt = "png" | "pdf" | "svg" | "xmind" | "mindpitch" | "md";
@@ -185,6 +186,17 @@ export default function ExportDialog({ wb, sheet, onClose, onDone }: Props) {
                 <label className="check">
                   <input type="checkbox" checked={o.title} onChange={(e) => set({ title: e.target.checked })} /> Tampilkan judul lembar di atas
                 </label>
+                {fmt === "pdf" && (() => {
+                  const n = collectAttachments(o.scope === "all" ? wb.sheets : [sheet]).length;
+                  return (
+                    <div className="field">
+                      <label className="check">
+                        <input type="checkbox" checked={o.attachments} disabled={n === 0} onChange={(e) => set({ attachments: e.target.checked })} /> Sertakan lampiran di halaman akhir ({n})
+                      </label>
+                      <small className="muted">{n === 0 ? "Belum ada lampiran pada lembar ini." : "Gambar dan PDF ditampilkan penuh; jenis berkas lain hanya dicantumkan namanya. Untuk menyimpan semua berkas, gunakan ekspor Map It."}</small>
+                    </div>
+                  );
+                })()}
                 {fmt === "png" && (
                   <label className="check">
                     <input type="checkbox" checked={o.transparent} onChange={(e) => set({ transparent: e.target.checked })} /> Latar transparan
