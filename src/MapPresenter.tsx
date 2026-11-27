@@ -34,6 +34,15 @@ export default function MapPresenter({ sheet, onClose, onAttach }: { sheet: Shee
       const nd = sheet.nodes[id];
       nodes[id] = { ...nd, collapsed: undefined, children: nd.children.filter((c) => seen.has(c) || (sheet.nodes[c]?.summary && seen.has(sheet.nodes[c].summary!.from) && seen.has(sheet.nodes[c].summary!.to))) };
     }
+    // topik yang sedang dibahas: tulisan dibesarkan, lalu kembali normal saat pindah
+    const c = nodes[seq[n - 1]];
+    if (c) {
+      let depth = 0;
+      for (let p = c.parentId; p && nodes[p]; p = nodes[p].parentId) depth++;
+      const base = c.fontSize ?? (depth === 0 ? 20 : depth === 1 ? 16 : 14);
+      const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
+      nodes[c.id] = { ...c, fontSize: Math.round(base * (coarse ? 1.7 : 1.5)) };
+    }
     return { ...sheet, nodes } as Sheet;
   }, [sheet, seq, n]);
   const layout = useMemo(() => computeLayout(shown), [shown]);

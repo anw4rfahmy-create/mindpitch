@@ -1,5 +1,5 @@
 /* Service worker Map It: offline-first untuk berkas aplikasi. Data peta disimpan di IndexedDB (lokal). */
-const CACHE = "mapit-v18";
+const CACHE = "mapit-v19";
 const CORE = [
   "./",
   "./index.html",
