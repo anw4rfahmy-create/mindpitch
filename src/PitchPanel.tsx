@@ -15,6 +15,7 @@ interface Props {
   startId: string | null;
   applySheet(fn: (s: Sheet) => Sheet, history?: boolean): void;
   onClose(): void;
+  onAttach?(nodeId: string): void;
 }
 
 function Seg<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange(v: T): void }) {
@@ -29,7 +30,7 @@ function Seg<T extends string | number>({ value, options, onChange }: { value: T
   );
 }
 
-export default function PitchPanel({ wb, sheet, startId, applySheet, onClose }: Props) {
+export default function PitchPanel({ wb, sheet, startId, applySheet, onClose, onAttach }: Props) {
   const p = sheet.pitch;
   const theme = pitchThemeById(p.theme);
   useSyncExternalStore(subscribeFiles, filesVersion);
@@ -265,7 +266,7 @@ export default function PitchPanel({ wb, sheet, startId, applySheet, onClose }: 
         </aside>
       </div>
 
-      {present && <Presenter slides={steps} opts={opts} perStep={p.secondsPerStep} startIndex={present.start} autoplay={present.auto} onClose={() => setPresent(null)} />}
+      {present && <Presenter slides={steps} opts={opts} perStep={p.secondsPerStep} startIndex={present.start} autoplay={present.auto} attCount={(id) => sheet.nodes[id]?.attachments?.length ?? 0} onAttach={onAttach} onClose={() => setPresent(null)} />}
     </div>
   );
 }

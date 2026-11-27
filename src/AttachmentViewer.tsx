@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Attachment } from "./types";
 import { MAX_FILE_BYTES, downloadStored, getFile, kindOf, urlOfAsync } from "./files";
 
@@ -21,6 +21,40 @@ export default function AttachmentViewer({ title, items, startId, onAdd, onRemov
   const [url, setUrl] = useState<string>();
   const [pdfFail, setPdfFail] = useState(false);
   const att = items.find((a) => a.id === cur) ?? items[0];
+
+  // pembatas daftar berkas ↔ pratinjau yang bisa digeser (disimpan)
+  const body = useRef<HTMLDivElement>(null);
+  const [listPx, setListPx] = useState<number | null>(() => {
+    try {
+      const v = Number(localStorage.getItem("mapit-attlist"));
+      return v > 0 ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const el = body.current!;
+    const stacked = getComputedStyle(el).flexDirection === "column";
+    const move = (ev: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      const total = stacked ? r.height : r.width;
+      const pos = stacked ? ev.clientY - r.top : ev.clientX - r.left;
+      setListPx(Math.round(Math.min(total - 120, Math.max(stacked ? 56 : 120, pos))));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setListPx((v) => {
+        try {
+          if (v) localStorage.setItem("mapit-attlist", String(v));
+        } catch {}
+        return v;
+      });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
   useEffect(() => {
     if (!items.find((a) => a.id === cur)) setCur(items[0]?.id);
@@ -66,7 +100,7 @@ export default function AttachmentViewer({ title, items, startId, onAdd, onRemov
             ✕
           </button>
         </div>
-        <div className="attach-body">
+        <div className="attach-body" ref={body} style={listPx ? ({ "--lp": listPx + "px" } as React.CSSProperties) : undefined}>
           <div className="attach-list">
             {items.length === 0 && <p className="muted small pad">Belum ada lampiran. Tambahkan gambar, PDF, PPT, atau berkas lain.</p>}
             {items.map((a) => (
@@ -89,6 +123,7 @@ export default function AttachmentViewer({ title, items, startId, onAdd, onRemov
               </div>
             ))}
           </div>
+          <div className="attach-split" onPointerDown={startResize} onDoubleClick={() => (setListPx(null), localStorage.removeItem("mapit-attlist"))} title="Geser untuk mengatur ukuran (klik dua kali: kembali ke bawaan)" role="separator" />
           <div className="attach-preview">
             {!att && <div className="muted">Pilih lampiran untuk dilihat</div>}
             {att && !url && <div className="muted">Memuat…</div>}

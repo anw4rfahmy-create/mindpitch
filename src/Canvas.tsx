@@ -107,7 +107,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     const coarse = matchMedia("(pointer: coarse)").matches;
     const fitK = Math.min(1.1, (w - 80) / Math.max(b.w, 1), (h - 130) / Math.max(b.h, 1));
     // di HP jangan mengecil sampai tak terbaca: pakai zoom minimum dan pusatkan pada topik pusat
-    const minK = coarse ? 0.55 : MIN_K;
+    const minK = coarse ? 0.22 : MIN_K;
     const k = Math.max(minK, fitK);
     if (k > fitK) {
       const r = layout.nodes[sheet.rootId];
@@ -178,7 +178,22 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     [fit, zoomAt, layout, setView, glideTo]
   );
 
+  // sesuaikan otomatis selama pengguna belum menggeser/zoom (ukuran area bisa baru stabil sesudah tampil)
+  const autoFit = useRef(true);
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => autoFit.current && fit());
+    ro.observe(el);
+    const t = window.setTimeout(() => autoFit.current && fit(), 350);
+    return () => {
+      ro.disconnect();
+      window.clearTimeout(t);
+    };
+  }, [fit]);
+
   useLayoutEffect(() => {
+    autoFit.current = true;
     fit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey]);
@@ -187,6 +202,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     const el = wrap.current!;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      autoFit.current = false;
       const r = el.getBoundingClientRect();
       if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.0025), e.clientX - r.left, e.clientY - r.top);
       else {
@@ -239,6 +255,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
   };
 
   const onPointerDown = (e: RPointerEvent) => {
+    autoFit.current = false;
     if (editingId) return;
     const el = e.target as Element;
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });

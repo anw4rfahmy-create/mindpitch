@@ -45,6 +45,14 @@ interface Props {
   onBack(): void;
 }
 
+function BraceIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-0.2em" }} aria-hidden>
+      <path d="M8 3c2.5 0 3.5 1 3.5 3v3c0 1.7 1 3 3.5 3-2.5 0-3.5 1.3-3.5 3v3c0 2-1 3-3.5 3" />
+    </svg>
+  );
+}
+
 export default function Editor({ initial, onBack }: Props) {
   const { doc, apply, applySheet, undo, redo, canUndo, canRedo, saved } = useDoc(initial);
   const sheet = activeSheet(doc);
@@ -717,7 +725,7 @@ export default function Editor({ initial, onBack }: Props) {
             <span className="ic">↷</span>Hubungan
           </button>
           <button className="rb" disabled={!sel || !sel.parentId} onClick={makeSummary} title={`Ringkasan (${scMap.summary})`}>
-            <span className="ic">⎬</span>Ringkasan
+            <span className="ic"><BraceIcon /></span>Ringkasan
           </button>
           <button className={"rb" + (sel?.boundary ? " on" : "")} disabled={!sel} onClick={toggleBoundary} title={`Batas (${scMap.boundary})`}>
             <span className="ic">▢</span>Batas
@@ -863,7 +871,7 @@ export default function Editor({ initial, onBack }: Props) {
                 ☑{multi.length > 1 ? ` ${multi.length}` : ""}
               </button>
               <button className="btn" disabled={!sel || !sel.parentId} onClick={makeSummary} title="Ringkasan: kurung yang merangkum topik terpilih (pilih beberapa saudara dengan ☑)">
-                ⎬ Ringkasan
+                <BraceIcon /> Ringkasan
               </button>
               <button className="btn" disabled={!sel || !sel.parentId} onClick={selectSiblings} title="Pilih semua saudara">
                 ⫴ Saudara
@@ -1043,7 +1051,7 @@ export default function Editor({ initial, onBack }: Props) {
       {showPitch && sheet.table && <TablePresenter sheet={sheet} onClose={() => setShowPitch(false)} onAttach={(r, c) => setAttachCell(`${r},${c}`)} />}
       {showPitch && sheet.venn && <VennPresenter sheet={sheet} onClose={() => setShowPitch(false)} />}
       {showMapPres && isMap && <MapPresenter sheet={sheet} onClose={() => setShowMapPres(false)} onAttach={setAttachFor} />}
-      {showPitch && isMap && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onClose={() => setShowPitch(false)} />}
+      {showPitch && isMap && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onAttach={setAttachFor} onClose={() => setShowPitch(false)} />}
     </div>
   );
 }

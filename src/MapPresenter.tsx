@@ -100,7 +100,11 @@ export default function MapPresenter({ sheet, onClose, onAttach }: { sheet: Shee
         />
         <div
           className="map-hit"
-          onClick={next}
+          onClick={(e) => {
+            const clip = document.elementsFromPoint(e.clientX, e.clientY).find((x) => x.closest("[data-clip]"))?.closest("[data-clip]");
+            if (clip) onAttach(clip.getAttribute("data-clip")!);
+            else next();
+          }}
           onContextMenu={(e) => {
             e.preventDefault();
             prev();

@@ -10,9 +10,11 @@ interface Props {
   startIndex?: number;
   autoplay?: boolean;
   onClose(): void;
+  attCount?(nodeId: string): number;
+  onAttach?(nodeId: string): void;
 }
 
-export default function Presenter({ slides, opts, perStep, startIndex = 0, autoplay, onClose }: Props) {
+export default function Presenter({ slides, opts, perStep, startIndex = 0, autoplay, onClose, attCount, onAttach }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const player = useRef<Player | null>(null);
@@ -116,6 +118,7 @@ export default function Presenter({ slides, opts, perStep, startIndex = 0, autop
   // papan ketik
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector(".attach-modal")) return;
       switch (e.key) {
         case "ArrowRight":
         case "ArrowDown":
@@ -204,6 +207,11 @@ export default function Presenter({ slides, opts, perStep, startIndex = 0, autop
         <button className="pbtn" onClick={() => setAuto((v) => !v)} title="Putar otomatis (A)">
           {auto ? "⏸ Jeda" : "▶ Otomatis"}
         </button>
+        {onAttach && cur && (attCount?.(cur.nodeId) ?? 0) > 0 && (
+          <button className="pbtn" onClick={() => (setAuto(false), onAttach(cur.nodeId))} title="Buka lampiran topik ini">
+            📎 Lampiran ({attCount!(cur.nodeId)})
+          </button>
+        )}
         <button className="pbtn" onClick={() => setNotes((v) => !v)} title="Catatan (N)">
           📝 Catatan
         </button>
