@@ -1377,3 +1377,11 @@ body.tbl-selecting, body.tbl-selecting * { user-select: none !important; cursor:
 .venn-edit { padding: 8px 12px 10px; border-top: 1px solid var(--line); background: var(--panel); }
 .venn-edit textarea, .venn-edit input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; resize: vertical; background: #fff; color: inherit; }
 .venn-present .tbl-stage { padding: 8px; }
+
+/* Presentasi Peta */
+.map-present { position: fixed; inset: 0; z-index: 90; background: #fff; display: flex; flex-direction: column; }
+.map-stage { position: relative; flex: 1; min-height: 0; }
+.map-stage > .canvas { position: absolute; inset: 0; }
+.map-hit { position: absolute; inset: 0; cursor: pointer; }
+.map-present .tbl-ctrl { background: #0b1020; }
+.map-present .tbl-ctrl .btn { color: #0f172a; } .map-present .tbl-ctrl .btn.primary { color: #fff; } .map-present .tbl-ctrl .btn:disabled { opacity: .45; }

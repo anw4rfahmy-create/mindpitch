@@ -30,6 +30,8 @@ export interface CanvasHandle {
   fit(): void;
   actual(): void;
   focusNode(id: string, k?: number): void;
+  glideTo(id: string, k: number, ms?: number): void;
+  glidePoint(x: number, y: number, k: number, ms?: number): void;
   zoomBy(factor: number): void;
 }
 
@@ -87,6 +89,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     h: number;
     moved: boolean;
   } | null>(null);
+  const glideRaf = useRef(0);
   const lastTap = useRef<{ id: string; t: number } | null>(null);
   const tapTimer = useRef(0);
   const lastTapCandidate = useRef<string | null>(null);
@@ -125,6 +128,24 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
     [setView]
   );
 
+  const glideTo = useCallback(
+    (wx: number, wy: number, k: number, ms: number) => {
+      const { w, h } = size();
+      const from = viewRef.current;
+      const to = { k, x: w / 2 - wx * k, y: h / 2 - wy * k };
+      cancelAnimationFrame(glideRaf.current);
+      const t0 = performance.now();
+      const step = (t: number) => {
+        const p = Math.min(1, (t - t0) / ms);
+        const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        setView({ k: from.k + (to.k - from.k) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e });
+        if (p < 1) glideRaf.current = requestAnimationFrame(step);
+      };
+      glideRaf.current = requestAnimationFrame(step);
+    },
+    [setView]
+  );
+
   useImperativeHandle(
     ref,
     () => ({
@@ -140,6 +161,12 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
           wy = (h / 2 - v.y) / v.k;
         setView({ k: 1, x: w / 2 - wx, y: h / 2 - wy });
       },
+      glideTo: (id: string, k: number, ms = 600) => {
+        const ln = layout.nodes[id];
+        if (!ln) return;
+        glideTo(ln.x + ln.w / 2, ln.y + ln.h / 2, k, ms);
+      },
+      glidePoint: (x: number, y: number, k: number, ms = 600) => glideTo(x, y, k, ms),
       focusNode: (id: string, k?: number) => {
         const ln = layout.nodes[id];
         if (!ln) return;
@@ -148,7 +175,7 @@ const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(props, ref) {
         setView({ k: kk, x: w / 2 - (ln.x + ln.w / 2) * kk, y: (h - 40) / 2 - (ln.y + ln.h / 2) * kk });
       },
     }),
-    [fit, zoomAt, layout, setView]
+    [fit, zoomAt, layout, setView, glideTo]
   );
 
   useLayoutEffect(() => {

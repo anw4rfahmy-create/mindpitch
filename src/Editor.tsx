@@ -6,6 +6,7 @@ import TableEditor from "./TableEditor";
 import TablePresenter from "./TablePresenter";
 import VennEditor from "./VennEditor";
 import VennPresenter from "./VennPresenter";
+import MapPresenter from "./MapPresenter";
 import { TABLE_TEMPLATES, TableTemplate, mapToTable } from "./table";
 import { importFile as importAny } from "./exporters";
 import SheetBar from "./SheetBar";
@@ -54,6 +55,7 @@ export default function Editor({ initial, onBack }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fitKey, setFitKey] = useState(0);
   const [showPitch, setShowPitch] = useState(false);
+  const [showMapPres, setShowMapPres] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
   const [showFormat, setShowFormat] = useState(false);
   const [panelTab, setPanelTab] = useState<"topic" | "map" | "keys" | "help">("map");
@@ -539,7 +541,7 @@ export default function Editor({ initial, onBack }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (showPitch || editingId || attachFor || insertKind || showSc) return;
+      if (showPitch || showMapPres || editingId || attachFor || insertKind || showSc) return;
       const t = e.target as HTMLElement;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
       const mod = e.ctrlKey || e.metaKey;
@@ -696,6 +698,11 @@ export default function Editor({ initial, onBack }: Props) {
         <button className="btn" onClick={() => setShowExport(true)}>
           ⬇ <span className="hide-sm">Ekspor</span>
         </button>
+        {isMap && (
+          <button className="btn" onClick={() => setShowMapPres(true)} title="Presentasi Peta: peta terbuka bertahap, kamera mengikuti topik">
+            🧭 <span className="hide-sm">Presentasi Peta</span>
+          </button>
+        )}
         <button className="btn primary" onClick={() => setShowPitch(true)}>
           {sheet.table || sheet.venn ? "▶ Presentasi" : "🎬 Presentasi"}
         </button>
@@ -1035,6 +1042,7 @@ export default function Editor({ initial, onBack }: Props) {
       )}
       {showPitch && sheet.table && <TablePresenter sheet={sheet} onClose={() => setShowPitch(false)} onAttach={(r, c) => setAttachCell(`${r},${c}`)} />}
       {showPitch && sheet.venn && <VennPresenter sheet={sheet} onClose={() => setShowPitch(false)} />}
+      {showMapPres && isMap && <MapPresenter sheet={sheet} onClose={() => setShowMapPres(false)} onAttach={setAttachFor} />}
       {showPitch && isMap && <PitchPanel wb={doc} sheet={sheet} startId={selectedId} applySheet={applySheet} onClose={() => setShowPitch(false)} />}
     </div>
   );
