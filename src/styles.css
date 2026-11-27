@@ -773,7 +773,7 @@ textarea {
   gap: 2px;
   overflow-x: auto;
   scrollbar-width: none;
-  max-width: calc(100% - 120px);
+  max-width: calc(100% - 190px);
   align-self: flex-end;
 }
 .sheet-tabs::-webkit-scrollbar {
@@ -1385,3 +1385,9 @@ body.tbl-selecting, body.tbl-selecting * { user-select: none !important; cursor:
 .map-hit { position: absolute; inset: 0; cursor: pointer; }
 .map-present .tbl-ctrl { background: #0b1020; }
 .map-present .tbl-ctrl .btn { color: #0f172a; } .map-present .tbl-ctrl .btn.primary { color: #fff; } .map-present .tbl-ctrl .btn:disabled { opacity: .45; }
+
+.sheet-arrow { flex-shrink: 0; width: 26px; height: 30px; border: 0; background: transparent; color: #475569; font-size: 22px; line-height: 1; cursor: pointer; border-radius: 8px; align-self: center; }
+.sheet-arrow:hover:not(:disabled) { background: #e2e8f0; }
+.sheet-arrow:disabled { opacity: .25; cursor: default; }
+.sheet-arrow[hidden] { display: none; }
+@media (max-width: 1180px) { .hide-md { display: none; } }

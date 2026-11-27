@@ -700,7 +700,7 @@ export default function Editor({ initial, onBack }: Props) {
         </button>
         {isMap && (
           <button className="btn" onClick={() => setShowMapPres(true)} title="Presentasi Peta: peta terbuka bertahap, kamera mengikuti topik">
-            🧭 <span className="hide-sm">Presentasi Peta</span>
+            🧭 <span className="hide-md">Presentasi Peta</span>
           </button>
         )}
         <button className="btn primary" onClick={() => setShowPitch(true)}>
